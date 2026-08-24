@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"/c/Users/Liam/OneDrive/folder\" && ls -la *.png *.jpg *.jpeg *.svg *.webp 2>/dev/null; echo \"---scratchpad---\"; ls -la \"/c/Users/Liam/AppData/Local/Temp/claude/C--Users-Liam-OneDrive-folder-claude/6412510d-40db-44ff-9bcf-450b013250ca/scratchpad\" 2>/dev/null)",
+      "Bash(python3 -c ' *)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Liam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Liam-OneDrive-folder-claude\\\\6412510d-40db-44ff-9bcf-450b013250ca\\\\scratchpad\\\\make-logo-variants.ps1\")",
+      "Bash(where python *)",
+      "Bash(where python3 *)",
+      "Bash(where node *)",
+      "Bash(where npx *)",
+      "PowerShell(Get-Command node, npx, npm, php, python -ErrorAction SilentlyContinue)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Liam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Liam-OneDrive-folder-claude\\\\a38a2900-e4f7-49e3-96eb-215ecfc9e3cd\\\\scratchpad\\\\serve.ps1\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Liam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Liam-OneDrive-folder-claude\\\\a38a2900-e4f7-49e3-96eb-215ecfc9e3cd\\\\scratchpad\\\\serve.ps1\")",
+      "PowerShell(node --version)",
+      "Bash(ls -la \"C:/Users/Liam/OneDrive/folder\" 2>&1)",
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(py --version)",
+      "PowerShell(powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Liam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Liam-OneDrive-folder-claude\\\\25324ed3-30cc-4667-8c34-617f799eca28\\\\scratchpad\\\\serve.ps1\")",
+      "Bash(mkdir -p \"C:/Users/Liam/OneDrive/folder/claude/.claude\")",
+      "Bash(rm -f \"C:/Users/Liam/OneDrive/folder/claude/.claude/launch.json\" && rmdir \"C:/Users/Liam/OneDrive/folder/claude/.claude\" 2>/dev/null; echo done)",
+      "PowerShell(powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Liam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Liam-OneDrive-folder-claude\\\\25324ed3-30cc-4667-8c34-617f799eca28\\\\scratchpad\\\\serve_project.ps1\")",
+      "Bash(ls -la ~/.claude/ 2>&1 | head -30; echo \"---\"; ls -la .claude/ 2>&1 | head -30)",
+      "Bash(tar --exclude='.claude' -czf ~/project-transfer.tar.gz -C \"/c/Users/Liam/OneDrive/folder\" claude)",
+      "Read(//c/Users/Liam/**)",
+      "Bash(tar -tzf ~/project-transfer.tar.gz)",
+      "WebFetch(domain:www.gstatic.com)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Liam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Liam-OneDrive-folder-claude\\\\f380e59c-bb43-4866-8c2b-6945a7554d91\\\\scratchpad\\\\serve.ps1\")",
+      "Bash(awk '$1>1')",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Liam\\\\OneDrive\\\\folder\\\\claude\\\\serve-root.ps1\")"
+    ]
+  }
+}

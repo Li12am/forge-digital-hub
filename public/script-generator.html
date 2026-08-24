@@ -1,0 +1,3899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Forge Digital — Cold Call Script Generator</title>
+<style>
+:root{
+  --bg:#05070d;
+  --bg-alt:#0a0e1a;
+  --panel:#0d1220;
+  --panel-2:#111830;
+  --border:#1c2540;
+  --border-hover:#2a3660;
+  --text:#e8ecf7;
+  --text-dim:#8b93b0;
+  --text-faint:#5a6285;
+  --blue:#2f8fff;
+  --blue-bright:#5ab0ff;
+  --blue-dim:#1a5fc4;
+  --glow:rgba(47,143,255,0.35);
+  /* Consumed by the shared sign-in gate in forge-shared.js so it renders in
+     this page's blue rather than the Client Hub's purple. */
+  --accent:#2f8fff;
+  --accent-bright:#5ab0ff;
+  --green:#2fe0a0;
+  --amber:#ffb84d;
+  --red:#ff5d7a;
+  --radius:14px;
+  --radius-sm:9px;
+  font-size:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Inter',Roboto,Helvetica,Arial,sans-serif;
+  min-height:100vh;
+  scroll-behavior:smooth;
+}
+body{
+  background:
+    radial-gradient(circle at 15% 0%, rgba(47,143,255,0.10), transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(47,143,255,0.06), transparent 40%),
+    var(--bg);
+  padding-bottom:80px;
+}
+::selection{background:var(--blue);color:#fff;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-track{background:var(--bg-alt);}
+::-webkit-scrollbar-thumb{background:#1e2848;border-radius:10px;}
+::-webkit-scrollbar-thumb:hover{background:var(--blue-dim);}
+
+a{color:var(--blue-bright);}
+
+/* ---------- Layout ---------- */
+.wrap{
+  max-width:1400px;
+  margin:0 auto;
+  padding:0 24px;
+}
+
+/* ---------- Header ---------- */
+header.top{
+  position:sticky;
+  top:0;
+  z-index:100;
+  backdrop-filter:blur(16px);
+  background:rgba(5,7,13,0.82);
+  border-bottom:1px solid var(--border);
+}
+.top-inner{
+  max-width:1400px;
+  margin:0 auto;
+  padding:16px 24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+}
+.brand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.brand-mark{
+  width:38px;height:38px;
+  border-radius:10px;
+  background:linear-gradient(135deg,var(--blue),#0c3a80);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;
+  font-size:18px;
+  box-shadow:0 0 24px var(--glow);
+  flex-shrink:0;
+}
+.brand-text .name{font-weight:700;font-size:17px;letter-spacing:0.2px;}
+.brand-text .sub{font-size:11.5px;color:var(--text-dim);letter-spacing:1.2px;text-transform:uppercase;}
+
+.mode-toggle{
+  display:flex;
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:999px;
+  padding:4px;
+  gap:4px;
+}
+.mode-toggle button{
+  border:none;
+  background:transparent;
+  color:var(--text-dim);
+  font-weight:600;
+  font-size:13.5px;
+  padding:9px 18px;
+  border-radius:999px;
+  cursor:pointer;
+  transition:all .25s ease;
+  white-space:nowrap;
+}
+.mode-toggle button.active{
+  background:linear-gradient(135deg,var(--blue),var(--blue-dim));
+  color:#fff;
+  box-shadow:0 0 18px var(--glow);
+}
+.mode-toggle button:not(.active):hover{color:var(--text);}
+
+/* ---------- Hero ---------- */
+.hero{
+  padding:38px 0 8px;
+}
+.hero h1{
+  font-size:clamp(24px,3.4vw,34px);
+  font-weight:800;
+  letter-spacing:-0.5px;
+  line-height:1.15;
+}
+.hero h1 span{
+  background:linear-gradient(90deg,var(--blue-bright),var(--blue));
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+.hero p{
+  color:var(--text-dim);
+  margin-top:8px;
+  font-size:15px;
+  max-width:640px;
+}
+
+/* ---------- Main grid ---------- */
+.layout{
+  display:grid;
+  grid-template-columns:400px 1fr;
+  gap:24px;
+  margin-top:28px;
+  align-items:start;
+}
+@media (max-width:980px){
+  .layout{grid-template-columns:1fr;}
+}
+/* Grid items default to min-width:auto, which means they refuse to shrink
+   below their content's intrinsic width — a wide row of batch chips (or a
+   long business name) would silently force this column, and the whole page,
+   wider than the viewport. min-width:0 lets the column actually respect its
+   1fr track so children needing horizontal scroll (like .batch-chip-row) can
+   do the scrolling internally instead of pushing the page wider. */
+.left-col, .right-col{min-width:0;}
+
+/* ---------- Panels ---------- */
+.panel{
+  background:linear-gradient(180deg,var(--panel),var(--bg-alt));
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px;
+  position:relative;
+  overflow:hidden;
+}
+.panel::before{
+  content:"";
+  position:absolute;
+  top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(90,176,255,0.5),transparent);
+}
+.panel-title{
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:1.4px;
+  text-transform:uppercase;
+  color:var(--blue-bright);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:16px;
+}
+.panel-title .dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--blue-bright);
+  box-shadow:0 0 8px var(--blue-bright);
+}
+.sticky-col{
+  position:sticky;
+  top:96px;
+}
+
+/* ---------- Form ---------- */
+.field{margin-bottom:16px;}
+.field label{
+  display:block;
+  font-size:13px;
+  font-weight:600;
+  color:var(--text-dim);
+  margin-bottom:6px;
+}
+.field label .opt{color:var(--text-faint);font-weight:400;text-transform:none;letter-spacing:0;}
+.field input[type=text],
+.field input[type=tel],
+.field input[type=url],
+.field textarea,
+.field select{
+  width:100%;
+  background:#080b14;
+  border:1px solid var(--border);
+  color:var(--text);
+  font-size:14.5px;
+  padding:11px 13px;
+  border-radius:var(--radius-sm);
+  font-family:inherit;
+  transition:border-color .2s, box-shadow .2s;
+}
+.field textarea{resize:vertical;min-height:64px;line-height:1.4;}
+.field input:focus,
+.field textarea:focus,
+.field select:focus{
+  outline:none;
+  border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(47,143,255,0.18);
+}
+.field select{
+  appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b93b0' stroke-width='1.6' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 14px center;
+  padding-right:34px;
+  cursor:pointer;
+}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media (max-width:460px){.two-col{grid-template-columns:1fr;}}
+
+/* Single / Bulk input toggle */
+.panel-title-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:16px;
+  flex-wrap:wrap;
+}
+.input-mode-toggle{
+  display:flex;
+  background:#080b14;
+  border:1px solid var(--border);
+  border-radius:999px;
+  padding:3px;
+  gap:2px;
+}
+.input-mode-toggle button{
+  border:none;
+  background:transparent;
+  color:var(--text-dim);
+  font-weight:600;
+  font-size:12px;
+  padding:6px 13px;
+  border-radius:999px;
+  cursor:pointer;
+  transition:all .2s ease;
+  white-space:nowrap;
+}
+.input-mode-toggle button.active{
+  background:linear-gradient(135deg,var(--blue),var(--blue-dim));
+  color:#fff;
+}
+.input-mode-toggle button:not(.active):hover{color:var(--text);}
+
+/* Bulk import */
+#bulkPaste{font-family:ui-monospace,'SF Mono',Consolas,monospace; font-size:12.5px; min-height:150px;}
+.bulk-preview{margin-top:12px;}
+.bulk-preview-summary{
+  font-size:13px;
+  font-weight:700;
+  color:var(--blue-bright);
+  margin-bottom:8px;
+}
+.bulk-preview-note{
+  font-size:11.5px;
+  color:var(--text-faint);
+  margin-bottom:10px;
+}
+.bulk-preview-warning{
+  font-size:12px;
+  color:var(--amber);
+  background:rgba(255,184,77,0.1);
+  border:1px solid rgba(255,184,77,0.35);
+  border-radius:var(--radius-sm);
+  padding:8px 12px;
+  margin-bottom:10px;
+}
+.bulk-preview-table-wrap{
+  max-height:260px;
+  overflow:auto;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  background:#080b14;
+}
+.bulk-preview-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
+.bulk-preview-table th{
+  position:sticky;
+  top:0;
+  background:#0d1220;
+  color:var(--text-faint);
+  text-transform:uppercase;
+  letter-spacing:0.4px;
+  font-size:10px;
+  font-weight:700;
+  text-align:left;
+  padding:8px 10px;
+  border-bottom:1px solid var(--border);
+  white-space:nowrap;
+}
+.bulk-preview-table td{
+  padding:8px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+  color:var(--text-dim);
+  max-width:160px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.bulk-preview-table tr:last-child td{border-bottom:none;}
+.bulk-preview-table td:first-child{color:var(--text); font-weight:600;}
+.bulk-preview-table tr.bpt-warn td:first-child{color:var(--amber);}
+.bulk-preview-table td.bpt-notes{max-width:200px;}
+.bulk-preview-empty{
+  color:var(--text-faint);
+  font-size:13px;
+  text-align:center;
+  padding:22px 10px;
+  border:1px dashed var(--border);
+  border-radius:var(--radius-sm);
+}
+.bulk-progress{margin-top:12px;}
+.bulk-progress-bar{
+  height:8px;
+  background:#080b14;
+  border:1px solid var(--border);
+  border-radius:999px;
+  overflow:hidden;
+}
+.bulk-progress-fill{
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg,var(--blue),var(--blue-bright));
+  transition:width .15s ease;
+}
+.bulk-progress-text{
+  font-size:12px;
+  color:var(--text-dim);
+  margin-top:6px;
+  text-align:center;
+}
+
+/* Tone selector */
+.tone-row{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+}
+@media (max-width:380px){
+  .tone-row{grid-template-columns:1fr;}
+}
+.tone-btn{
+  background:#080b14;
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  padding:10px 6px;
+  border-radius:var(--radius-sm);
+  cursor:pointer;
+  font-size:12.5px;
+  font-weight:600;
+  text-align:center;
+  transition:all .2s;
+  white-space:nowrap;
+}
+.tone-btn:hover{border-color:var(--border-hover);color:var(--text);}
+.tone-btn.active{
+  background:rgba(47,143,255,0.14);
+  border-color:var(--blue);
+  color:var(--blue-bright);
+  box-shadow:0 0 14px rgba(47,143,255,0.15) inset;
+}
+
+.generate-btn{
+  width:100%;
+  margin-top:8px;
+  padding:15px;
+  border:none;
+  border-radius:var(--radius-sm);
+  background:linear-gradient(135deg,var(--blue-bright),var(--blue-dim));
+  color:#fff;
+  font-weight:800;
+  font-size:15.5px;
+  letter-spacing:0.3px;
+  cursor:pointer;
+  box-shadow:0 6px 24px rgba(47,143,255,0.35);
+  transition:transform .15s ease, box-shadow .15s ease;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+}
+.generate-btn:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(47,143,255,0.45);}
+.generate-btn:active{transform:translateY(0);}
+.generate-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none;}
+.generate-btn svg{width:17px;height:17px;}
+
+.form-hint{
+  font-size:12px;
+  color:var(--text-faint);
+  margin-top:10px;
+  text-align:center;
+}
+
+/* ---------- Checklist ---------- */
+.checklist{list-style:none;margin-top:4px;}
+.checklist li{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  padding:9px 0;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+  font-size:13.5px;
+  color:var(--text-dim);
+  cursor:pointer;
+}
+.checklist li:last-child{border-bottom:none;}
+.checklist input[type=checkbox]{
+  margin-top:2px;
+  accent-color:var(--blue);
+  width:15px;height:15px;
+  flex-shrink:0;
+  cursor:pointer;
+}
+.checklist li.checked span{color:var(--text-faint);text-decoration:line-through;}
+
+.note-list{
+  list-style:none;
+  margin-top:14px;
+}
+.note-list li{
+  font-size:13px;
+  color:var(--text-dim);
+  padding:5px 0 5px 16px;
+  position:relative;
+  line-height:1.5;
+}
+.note-list li::before{
+  content:"—";
+  position:absolute;
+  left:0;
+  color:var(--blue-bright);
+}
+
+/* ---------- History ---------- */
+.history-empty{
+  color:var(--text-faint);
+  font-size:13px;
+  text-align:center;
+  padding:18px 8px;
+  line-height:1.5;
+}
+.history-list-scroll{
+  max-height:280px;
+  overflow-y:auto;
+  padding-right:2px;
+}
+.history-item{
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  margin-bottom:8px;
+  cursor:pointer;
+  transition:all .2s;
+  background:#080b14;
+}
+.history-item:hover{border-color:var(--border-hover);}
+.history-item.active{border-color:var(--blue); background:rgba(47,143,255,0.08);}
+.history-item .hi-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.history-item .hi-main{overflow:hidden; min-width:0;}
+.history-item .hi-name{
+  font-size:13px;
+  font-weight:700;
+  color:var(--text);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.history-item .hi-tel{
+  font-size:12px;
+  text-decoration:none;
+  flex-shrink:0;
+  opacity:0.85;
+}
+.history-item .hi-tel:hover{opacity:1;}
+/* .hi-tel is now a <button> (it copies + opens Google Voice rather than
+   being a tel: link), so it needs the browser button chrome stripped back
+   to the bare icon it was. Declared unscoped because the Call Log panel
+   uses the same class outside .history-item. */
+.hi-tel{
+  background:none;border:none;padding:0;margin:0;
+  font:inherit;font-size:12px;line-height:1;cursor:pointer;
+  flex-shrink:0;opacity:0.85;transition:opacity .15s ease,transform .15s ease;
+}
+.hi-tel:hover{opacity:1;transform:scale(1.15);}
+.history-item .hi-meta{
+  font-size:11px;
+  color:var(--text-faint);
+  margin-top:3px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.history-item .hi-count{color:var(--text-faint);}
+.history-item .hi-del{
+  background:none;
+  border:none;
+  color:var(--text-faint);
+  cursor:pointer;
+  font-size:16px;
+  padding:2px 6px;
+  flex-shrink:0;
+  line-height:1;
+  border-radius:6px;
+}
+.history-item .hi-del:hover{color:var(--red); background:rgba(255,93,122,0.1);}
+.history-item.needs-followup{border-color:rgba(255,184,77,0.4);}
+.history-item .hi-followup{
+  flex-shrink:0;
+  background:rgba(255,184,77,0.12);
+  border:1px solid rgba(255,184,77,0.4);
+  color:var(--amber);
+  font-size:10.5px;
+  font-weight:700;
+  padding:5px 9px;
+  border-radius:999px;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:all .2s;
+}
+.history-item .hi-followup:hover{background:rgba(255,184,77,0.22); border-color:var(--amber);}
+.hi-outcome-select{
+  width:100%;
+  margin-top:8px;
+  background:#0d1220;
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  font-size:11.5px;
+  padding:6px 8px;
+  border-radius:6px;
+  cursor:pointer;
+}
+.hi-outcome-select:hover{border-color:var(--border-hover); color:var(--text);}
+.hi-outcome-select:focus{outline:none; border-color:var(--blue);}
+
+/* ---------- Call Log ---------- */
+.calllog-tabs{
+  display:flex;
+  background:#080b14;
+  border:1px solid var(--border);
+  border-radius:999px;
+  padding:3px;
+  gap:2px;
+  margin-bottom:12px;
+}
+.clt-btn{
+  flex:1;
+  border:none;
+  background:transparent;
+  color:var(--text-dim);
+  font-weight:600;
+  font-size:11.5px;
+  padding:8px 6px;
+  border-radius:999px;
+  cursor:pointer;
+  transition:all .2s ease;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  white-space:nowrap;
+}
+.clt-btn.active{
+  background:linear-gradient(135deg,var(--blue),var(--blue-dim));
+  color:#fff;
+}
+.clt-btn:not(.active):hover{color:var(--text);}
+.clt-count{
+  background:rgba(255,255,255,0.15);
+  padding:1px 6px;
+  border-radius:999px;
+  font-size:10px;
+}
+.clt-btn.active .clt-count{background:rgba(255,255,255,0.25);}
+
+.cl-item{
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  margin-bottom:8px;
+  background:#080b14;
+}
+.cl-name{
+  font-size:13px;
+  font-weight:700;
+  color:var(--text);
+  overflow-wrap:anywhere;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.cl-notes{
+  font-size:12px;
+  color:var(--text-dim);
+  font-style:italic;
+  margin-top:5px;
+  overflow-wrap:anywhere;
+}
+.cl-actions{
+  display:flex;
+  gap:6px;
+  margin-top:8px;
+}
+.cl-btn{
+  flex:1;
+  background:transparent;
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  font-size:11px;
+  font-weight:600;
+  padding:6px 8px;
+  border-radius:6px;
+  cursor:pointer;
+  transition:all .2s;
+}
+.cl-btn:hover{border-color:var(--border-hover); color:var(--text);}
+.cl-btn-accent{
+  border-color:rgba(255,184,77,0.4);
+  color:var(--amber);
+  background:rgba(255,184,77,0.08);
+}
+.cl-btn-accent:hover{background:rgba(255,184,77,0.18); border-color:var(--amber);}
+
+.outcome-badge{
+  display:inline-block;
+  font-size:9.5px;
+  font-weight:700;
+  padding:2px 7px;
+  border-radius:999px;
+  text-transform:uppercase;
+  letter-spacing:0.4px;
+  white-space:nowrap;
+}
+.outcome-badge.ob-interested{background:rgba(47,224,160,0.14); color:var(--green);}
+.outcome-badge.ob-not_interested{background:rgba(255,93,122,0.14); color:var(--red);}
+.outcome-badge.ob-call_later{background:rgba(255,184,77,0.14); color:var(--amber);}
+.outcome-badge.ob-send_portfolio{background:rgba(47,143,255,0.14); color:var(--blue-bright);}
+.outcome-badge.ob-no_answer, .outcome-badge.ob-hung_up{background:rgba(139,147,176,0.14); color:var(--text-dim);}
+
+/* ---------- Call Outcome / Follow-up ---------- */
+.outcome-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:14px;
+}
+.outcome-btn{
+  background:#080b14;
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  padding:8px 14px;
+  border-radius:999px;
+  font-size:12.5px;
+  font-weight:600;
+  cursor:pointer;
+  transition:all .2s;
+}
+.outcome-btn:hover{border-color:var(--border-hover); color:var(--text);}
+.outcome-btn.active{
+  border-color:var(--blue);
+  background:rgba(47,143,255,0.14);
+  color:var(--blue-bright);
+  box-shadow:0 0 12px rgba(47,143,255,0.15) inset;
+}
+.call-log-hint{
+  font-size:12px;
+  color:var(--text-faint);
+  margin-top:2px;
+}
+
+/* ---------- Output area ---------- */
+.output-empty{
+  border:1px dashed var(--border);
+  border-radius:var(--radius);
+  padding:70px 30px;
+  text-align:center;
+  color:var(--text-faint);
+}
+.output-empty .icon{font-size:38px;margin-bottom:14px;opacity:0.6;}
+.output-empty h3{color:var(--text-dim);font-size:16px;margin-bottom:6px;}
+.output-empty p{font-size:13.5px;max-width:360px;margin:0 auto;}
+
+/* Bulk batch navigator */
+.batch-strip{
+  background:linear-gradient(180deg,var(--panel-2),var(--bg-alt));
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:14px 16px;
+  margin-bottom:20px;
+}
+.batch-strip-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:10px;
+}
+.batch-strip-title{
+  font-size:12.5px;
+  font-weight:700;
+  color:var(--blue-bright);
+}
+.batch-strip-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.batch-chip-row{
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  padding-bottom:2px;
+}
+.batch-chip{
+  flex-shrink:0;
+  background:#080b14;
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  padding:7px 13px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:600;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:all .2s;
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+.batch-chip:hover{border-color:var(--border-hover); color:var(--text);}
+.batch-chip.active{
+  border-color:var(--blue);
+  background:rgba(47,143,255,0.14);
+  color:var(--blue-bright);
+}
+.batch-chip .bc-outcome{font-size:9px;}
+
+.output-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+}
+.output-header > div:first-child{min-width:0; flex:1 1 260px;}
+.output-header h2{font-size:19px;font-weight:800;overflow-wrap:anywhere;}
+.output-header .biz-tag{
+  font-size:12.5px;
+  color:var(--blue-bright);
+  font-weight:600;
+  overflow-wrap:anywhere;
+}
+.output-actions{display:flex;gap:8px;flex-wrap:wrap;}
+
+.btn-ghost{
+  background:transparent;
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  padding:9px 14px;
+  border-radius:var(--radius-sm);
+  font-size:12.5px;
+  font-weight:600;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  transition:all .2s;
+}
+.btn-ghost:hover{border-color:var(--blue);color:var(--blue-bright);}
+.btn-ghost.copied{border-color:var(--green);color:var(--green);}
+.btn-ghost:disabled{opacity:0.45; cursor:not-allowed;}
+.btn-ghost:disabled:hover{border-color:var(--border); color:var(--text-dim);}
+
+/* Dedicated call action — a filled green button so it reads as the one
+   physical-world action on the page, distinct from the outlined ghost
+   buttons around it (export, follow-up, etc). */
+.call-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  background:linear-gradient(135deg,#39e8ac,#149e6c);
+  border:none;
+  color:#04160f;
+  font-family:inherit;
+  font-size:12.5px;
+  font-weight:800;
+  padding:9px 16px;
+  border-radius:var(--radius-sm);
+  text-decoration:none;
+  cursor:pointer;
+  box-shadow:0 4px 16px rgba(47,224,160,0.35);
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.call-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(47,224,160,0.5);}
+.call-btn:active{transform:translateY(0);}
+
+/* Maps action — same weight and shape as the call button so the two read as
+   a pair, in the page's blue accent rather than green so they stay visually
+   distinct at a glance. */
+.maps-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  background:linear-gradient(135deg,var(--blue-bright),var(--blue-dim));
+  border:none;
+  color:#fff;
+  font-family:inherit;
+  font-size:12.5px;
+  font-weight:800;
+  padding:9px 16px;
+  border-radius:var(--radius-sm);
+  text-decoration:none;
+  cursor:pointer;
+  box-shadow:0 4px 16px rgba(47,143,255,0.35);
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.maps-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(47,143,255,0.5);}
+.maps-btn:active{transform:translateY(0);}
+
+/* Approach tabs */
+.tabs{
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  padding-bottom:10px;
+  margin-bottom:6px;
+  scrollbar-width:thin;
+}
+.tabs::-webkit-scrollbar{height:6px;}
+.tab{
+  flex-shrink:0;
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  padding:9px 16px;
+  border-radius:999px;
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:all .2s;
+}
+.tab:hover{border-color:var(--border-hover);color:var(--text);}
+.tab.active{
+  background:linear-gradient(135deg,var(--blue),var(--blue-dim));
+  border-color:var(--blue);
+  color:#fff;
+  box-shadow:0 0 16px rgba(47,143,255,0.3);
+}
+
+/* Script card */
+.script-card{
+  background:linear-gradient(180deg,var(--panel),var(--bg-alt));
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:24px;
+  margin-bottom:20px;
+  animation:slideIn .45s ease both;
+}
+@keyframes slideIn{
+  from{opacity:0;transform:translateY(14px);}
+  to{opacity:1;transform:translateY(0);}
+}
+.script-card h3{
+  font-size:16px;
+  font-weight:800;
+  margin-bottom:4px;
+  color:var(--blue-bright);
+}
+.script-card .approach-desc{
+  font-size:12.5px;
+  color:var(--text-faint);
+  margin-bottom:18px;
+}
+
+.segment{
+  margin-bottom:16px;
+  border-left:2px solid var(--border);
+  padding-left:14px;
+  position:relative;
+}
+.segment:last-child{margin-bottom:0;}
+.segment .seg-label{
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  color:var(--amber);
+  margin-bottom:6px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.segment .seg-time{
+  font-size:10.5px;
+  color:var(--text-faint);
+  font-weight:500;
+  text-transform:none;
+  letter-spacing:0;
+}
+.segment p{
+  font-size:14.5px;
+  line-height:1.65;
+  color:var(--text);
+  white-space:pre-line;
+}
+.segment .copy-line{
+  margin-top:8px;
+}
+
+/* copy mini button */
+.copy-mini{
+  background:rgba(47,143,255,0.08);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  font-size:11px;
+  font-weight:600;
+  padding:5px 10px;
+  border-radius:6px;
+  cursor:pointer;
+  transition:all .2s;
+}
+.copy-mini:hover{border-color:var(--blue);color:var(--blue-bright);}
+.copy-mini.copied{border-color:var(--green);color:var(--green);}
+
+/* Objections panel */
+.objection{
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:14px 16px;
+  margin-bottom:10px;
+  background:#080b14;
+  transition:border-color .2s;
+}
+.objection:hover{border-color:var(--border-hover);}
+.objection .q{
+  font-size:13.5px;
+  font-weight:700;
+  color:var(--amber);
+  margin-bottom:6px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.objection .a{
+  font-size:13.5px;
+  color:var(--text-dim);
+  line-height:1.55;
+}
+
+/* Follow-up texts */
+.text-msg{
+  background:#080b14;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:14px 16px;
+  margin-bottom:10px;
+}
+.text-msg .label{
+  font-size:11px;
+  font-weight:700;
+  color:var(--green);
+  text-transform:uppercase;
+  letter-spacing:1px;
+  margin-bottom:6px;
+}
+.text-msg p{font-size:13.5px;color:var(--text);line-height:1.5;}
+.text-msg .copy-line{margin-top:8px;}
+
+/* Section headers within output */
+.section-block{margin-top:34px;}
+.section-block > .panel-title{margin-bottom:14px;}
+
+/* toast */
+.toast{
+  position:fixed;
+  bottom:24px;
+  left:50%;
+  transform:translateX(-50%) translateY(20px);
+  background:#0d1428;
+  border:1px solid var(--blue);
+  color:var(--text);
+  padding:12px 22px;
+  border-radius:999px;
+  font-size:13.5px;
+  font-weight:600;
+  box-shadow:0 10px 30px rgba(0,0,0,0.5), 0 0 20px var(--glow);
+  z-index:999;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .25s ease, transform .25s ease;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
+
+/* loading */
+.loading-wrap{
+  padding:60px 20px;
+  text-align:center;
+}
+.spinner{
+  width:44px;height:44px;
+  border-radius:50%;
+  border:3px solid var(--border);
+  border-top-color:var(--blue);
+  margin:0 auto 18px;
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-wrap p{color:var(--text-dim);font-size:14px;}
+
+/* after-call */
+.aftercall-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+}
+@media (max-width:640px){.aftercall-grid{grid-template-columns:1fr;}}
+.aftercall-card{
+  background:#080b14;
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:16px;
+}
+.aftercall-card h4{
+  font-size:13px;
+  color:var(--blue-bright);
+  margin-bottom:8px;
+  font-weight:700;
+}
+.aftercall-card ul{padding-left:18px;color:var(--text-dim);font-size:13px;line-height:1.7;}
+
+/* badge */
+.badge{
+  display:inline-block;
+  font-size:10.5px;
+  font-weight:700;
+  padding:3px 9px;
+  border-radius:999px;
+  background:rgba(47,224,160,0.12);
+  color:var(--green);
+  border:1px solid rgba(47,224,160,0.3);
+  text-transform:uppercase;
+  letter-spacing:0.6px;
+}
+
+footer.foot{
+  text-align:center;
+  color:var(--text-faint);
+  font-size:12px;
+  margin-top:60px;
+  padding-bottom:20px;
+}
+
+@media (max-width:640px){
+  .panel{padding:16px;}
+  .wrap{padding:0 14px;}
+  .output-header{flex-direction:column;align-items:flex-start;}
+}
+
+/* ---------------- Signed-in user chip ---------------- */
+.user-chip{
+  display:inline-flex;align-items:center;gap:7px;background:var(--panel-2);
+  border:1px solid var(--border);border-radius:999px;padding:5px 6px 5px 10px;
+  font-size:12px;font-weight:600;color:var(--text-dim);white-space:nowrap;
+}
+.user-chip img{width:22px;height:22px;border-radius:50%;}
+.user-chip button{
+  background:none;border:none;color:var(--text-faint);font-size:11.5px;font-weight:700;
+  cursor:pointer;padding:2px 6px;border-radius:999px;
+}
+.user-chip button:hover{color:var(--red);}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <button class="brand fd-nav-trigger" data-fd-nav-trigger type="button" title="Open Forge Digital menu">
+      <div class="brand-mark">FD</div>
+      <div class="brand-text">
+        <div class="name">Forge Digital</div>
+        <div class="sub">Script Generator</div>
+      </div>
+    </button>
+    <div class="mode-toggle" id="modeToggle">
+      <button class="active" data-mode="phone">📞 Phone Call</button>
+      <button data-mode="inperson">🚪 In-Person</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span id="userChip" class="user-chip" style="display:none;"></span>
+      <a href="client-hub.html" class="btn-ghost" style="text-decoration:none;">🗂️ Client Hub</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <h1>Build a script that <span>closes</span>, not one that reads like a robot.</h1>
+    <p>Drop in what you know about the business, pick a tone, and get eight battle-tested approaches — built to book the callback, not just start a conversation — plus objection handlers and follow-up texts, ready in seconds.</p>
+  </div>
+
+  <div class="layout">
+
+    <!-- LEFT COLUMN -->
+    <div class="left-col">
+      <div class="sticky-col">
+
+        <div class="panel" style="margin-bottom:20px;" id="callLogPanel">
+          <div class="panel-title"><span class="dot"></span>Call Log</div>
+          <div class="calllog-tabs" id="callLogTabs">
+            <button class="clt-btn active" data-cltab="followup">🔔 Needs Follow-up <span class="clt-count" id="cltCountFollowup">0</span></button>
+            <button class="clt-btn" data-cltab="general">📋 General Log <span class="clt-count" id="cltCountGeneral">0</span></button>
+          </div>
+          <div id="callLogList"></div>
+        </div>
+
+        <div class="panel" style="margin-bottom:20px;" id="historyPanel">
+          <div class="panel-title"><span class="dot"></span>Call History</div>
+          <div id="historyList"></div>
+        </div>
+
+        <div class="panel" style="margin-bottom:20px;">
+          <div class="panel-title-row">
+            <div class="panel-title" style="margin-bottom:0;"><span class="dot"></span>Business Info</div>
+            <div class="input-mode-toggle" id="inputModeToggle">
+              <button type="button" class="active" data-input-mode="single">Single</button>
+              <button type="button" data-input-mode="bulk">📋 Bulk</button>
+            </div>
+          </div>
+
+          <div id="singleFields">
+            <div class="field">
+              <label>Business Name *</label>
+              <input type="text" id="bizName" placeholder="e.g. Keystone Auto Repair">
+            </div>
+
+            <div class="two-col">
+              <div class="field">
+                <label>Owner Name <span class="opt">(optional)</span></label>
+                <input type="text" id="ownerName" placeholder="e.g. Mike">
+              </div>
+              <div class="field">
+                <label>Phone Number</label>
+                <input type="tel" id="phoneNumber" placeholder="(215) 555-0134">
+              </div>
+            </div>
+
+            <div class="field">
+              <label>City <span class="opt">(optional — used by the Maps button)</span></label>
+              <input type="text" id="city" placeholder="e.g. Feasterville">
+            </div>
+
+            <div class="field">
+              <label>Type of Business</label>
+              <select id="bizType">
+                <option>Contractor</option>
+                <option>Auto Repair</option>
+                <option>Landscaping</option>
+                <option>Plumbing</option>
+                <option>Electrical</option>
+                <option>Roofing</option>
+                <option>Sealcoating / Asphalt</option>
+                <option>HVAC</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div class="field" id="customTypeField" style="display:none;">
+              <label>What kind of business? <span class="opt">(used throughout the script)</span></label>
+              <input type="text" id="customType" placeholder="e.g. Sealcoating / Asphalt Repair, Power Washing, Fencing...">
+            </div>
+
+            <div class="field">
+              <label>Current Website URL <span class="opt">(leave blank or type "no website" if they don't have one)</span></label>
+              <input type="text" id="websiteUrl" placeholder="e.g. keystoneauto.com — or leave blank">
+            </div>
+
+            <div class="field">
+              <label>Problems You Spotted <span class="opt">(optional — leave blank and we'll use a strong default for their industry)</span></label>
+              <textarea id="problems" placeholder="e.g. site isn't mobile-friendly, no way to book online, looks like it's from 2012"></textarea>
+            </div>
+
+            <div class="field">
+              <label>Notes About the Business <span class="opt">(optional)</span></label>
+              <textarea id="notes" placeholder="e.g. been open 15 years, busy shop, family-owned, lots of good Google reviews"></textarea>
+            </div>
+
+            <div class="field">
+              <label>Best Time To Call Back <span class="opt">(optional)</span></label>
+              <input type="text" id="callbackTime" placeholder="e.g. after 3pm">
+            </div>
+          </div>
+
+          <div id="bulkFields" style="display:none;">
+            <div class="field">
+              <label>Paste Business List <span class="opt">(from Google Sheets, Excel, or a CSV)</span></label>
+              <textarea id="bulkPaste" rows="7" placeholder="Best results: include a header row so columns are matched by name (any order works then).
+
+Business Name	Type	Phone	Owner	Website	Notes
+Keystone Auto Repair	Auto Repair	215-555-0134	Mike	keystoneauto.com	family owned, 15 years
+Bucks Landscaping	Landscaping	215-555-0199			no website yet
+
+No header? Columns are assumed to be in that same order: Name, Type, Phone, Owner, Website, Notes.
+Works with tab-separated (Sheets/Excel paste) or comma-separated (CSV)."></textarea>
+            </div>
+            <div id="bulkPreview"></div>
+          </div>
+
+          <div class="field">
+            <label>Goal of This Call</label>
+            <select id="callGoal">
+              <option value="calendly">Book a Calendly call</option>
+              <option value="portfolio">Get permission to send portfolio</option>
+              <option value="conversation">Just start a conversation</option>
+              <option value="qualify">Qualify if they're a good fit</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Tone</label>
+            <div class="tone-row" id="toneRow">
+              <button type="button" class="tone-btn active" data-tone="chill">😎 Chill &amp; Casual</button>
+              <button type="button" class="tone-btn" data-tone="balanced">⚖️ Balanced</button>
+              <button type="button" class="tone-btn" data-tone="aggressive">🔥 Bold &amp; Direct</button>
+            </div>
+          </div>
+
+          <button class="generate-btn" id="generateBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 11-14h-7l1-6z"/></svg>
+            <span id="generateBtnLabel">Generate Scripts</span>
+          </button>
+          <div class="bulk-progress" id="bulkProgress" style="display:none;">
+            <div class="bulk-progress-bar"><div class="bulk-progress-fill" id="bulkProgressFill"></div></div>
+            <div class="bulk-progress-text" id="bulkProgressText"></div>
+          </div>
+          <div class="form-hint" id="formHint">8 approaches · objection handlers · follow-up texts</div>
+        </div>
+
+        <div class="panel" style="margin-bottom:20px;">
+          <div class="panel-title"><span class="dot"></span>Pre-Call Checklist</div>
+          <ul class="checklist" id="preChecklist">
+            <li><input type="checkbox"><span>Know the business name &amp; who's likely answering</span></li>
+            <li><input type="checkbox"><span>Actually looked at their website / Google listing</span></li>
+            <li><input type="checkbox"><span>Picked 1-2 real problems if you spotted any (optional)</span></li>
+            <li><input type="checkbox"><span>Know your opening line cold — no reading</span></li>
+            <li><input type="checkbox"><span>Standing up, smiling, phone charged</span></li>
+            <li><input type="checkbox"><span>Notepad ready to jot down what they say</span></li>
+          </ul>
+        </div>
+
+        <div class="panel" style="margin-bottom:20px;">
+          <div class="panel-title"><span class="dot"></span>Objection Handlers</div>
+          <div id="objectionsList"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title"><span class="dot"></span>Pricing Guidance</div>
+          <div class="objection">
+            <div class="q">If they ask "how much?"
+              <button class="copy-mini" id="pricingCopyBtn">Copy</button>
+            </div>
+            <div class="a" id="pricingLine">Most of the sites we build for local contractors land between $1,000 and $1,500 depending on what you need. I can give you an exact number after I see what you're looking for.</div>
+          </div>
+          <ul class="note-list">
+            <li>Don't lead with price</li>
+            <li>Only talk about price if they ask</li>
+            <li>Be willing to do $1,000 for the first few clients to get testimonials</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+      <div id="outputArea">
+        <div class="output-empty">
+          <div class="icon">📜</div>
+          <h3>No script yet</h3>
+          <p>Fill in the business details on the left and hit <strong>Generate Scripts</strong> — your personalized call sheet will show up here.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="foot">Forge Digital · Built for cold calls that actually land</footer>
+</div>
+
+<div class="toast" id="toast">Copied to clipboard</div>
+
+<script type="module">
+import {
+  db, collection, doc, addDoc, updateDoc, deleteDoc, getDoc, onSnapshot, serverTimestamp, increment,
+  requireAuth, currentUser, signOutUser, initAppNav,
+  statusFromOutcomes, isTerminalStatus, mapLeadToScriptFields, stripUndefined, todayIso,
+  followUpFieldsForCall, followUpLabel, FOLLOWUP_DEFAULT_DAYS,
+  callViaGoogleVoice
+} from './forge-shared.js';
+
+(function(){
+
+/* ---------------- State ---------------- */
+let currentMode = 'phone';
+let currentTone = 'chill';
+let lastData = null;
+let activeApproachIdx = 0;
+let activeClosingOutcome = 'interested';
+let showFollowUp = false;
+let inputMode = 'single';
+let currentBatch = [];   // array of data objects from the most recent bulk generation
+let activeBatchKey = null;
+let pendingOutcomes = []; // outcomes toggled on for the call about to be logged, not yet saved
+let pendingNotes = '';    // notes typed for that not-yet-logged call
+let callLogTab = 'followup'; // 'followup' | 'general' — active tab in the Call Log panel
+// Set by importIncomingLead() below when this page was opened from the Client
+// Hub's "Send to Script Generator" button. Threaded onto generated business
+// data (see buildBusinessData) so logging a call can report back to it.
+let incomingLeadFinderId = null;
+let incomingLeadFinderBizName = '';
+
+/* ---------------- History (shared, lives in Firestore) ----------------
+   One document per business, keyed by the normalised business name, in the
+   'callHistory' collection. Rebuilt on every snapshot so both of you see the
+   same call log in real time. */
+const HISTORY_COLLECTION = 'callHistory';
+const historyCol = collection(db, HISTORY_COLLECTION);
+function historyRef(id){ return doc(db, HISTORY_COLLECTION, id); }
+let historyList = [];
+let historySyncState = 'connecting';
+
+const OUTCOME_LABELS = {
+  no_answer: 'No Answer',
+  hung_up: 'Hung Up',
+  interested: 'Interested',
+  send_portfolio: 'Send Portfolio',
+  call_later: 'Call Later',
+  not_interested: 'Not Interested'
+};
+/* A single logged call can carry more than one outcome at once (e.g. Interested
+   + Call Later). These two sets are the Call Log's categories: anything with at
+   least one FOLLOWUP_OUTCOME needs action; a call tagged only with GENERAL
+   outcomes is just a record, nothing pending on it. */
+const FOLLOWUP_OUTCOMES = ['interested','send_portfolio','call_later'];
+const GENERAL_OUTCOMES = ['no_answer','hung_up','not_interested'];
+function callNeedsFollowUp(outcomes){
+  return !!(outcomes && outcomes.some(o => FOLLOWUP_OUTCOMES.includes(o)));
+}
+
+/* Every entry keeps a full log of calls over time — never a single overwritable
+   field. Each logged call can carry multiple outcomes plus an optional note.
+   Two generations of old saves get upgraded here on read: entry.outcome
+   (pre-log, single field) and outcomeLog items shaped {outcome, at}
+   (pre-multi-select, one outcome per entry). Nothing is ever discarded. */
+function migrateEntry(entry){
+  if(!entry.outcomeLog){
+    entry.outcomeLog = entry.outcome ? [{ outcome: entry.outcome, at: entry.outcomeAt || entry.updatedAt || entry.createdAt || Date.now() }] : [];
+  }
+  entry.outcomeLog = entry.outcomeLog.map(item => {
+    if(item.outcomes) return item;
+    return {
+      id: item.id || ('c_' + item.at + '_' + Math.floor(Math.random()*10000)),
+      outcomes: item.outcome ? [item.outcome] : [],
+      notes: item.notes || '',
+      at: item.at
+    };
+  });
+  return entry;
+}
+
+/* Writes the outcome of a logged call back onto the originating Client Hub
+   lead. statusFromOutcomes and isTerminalStatus are imported from the shared
+   module so both apps agree on exactly what "Not Interested" means and which
+   statuses drop a lead into permanent History. */
+function pushStatusToClientHub(leadId, outcomes){
+  // followUpFieldsForCall is shared with the Client Hub's own quick-log
+  // buttons, so a call logged here produces exactly the same fields: status,
+  // the exact call timestamp, and the next follow-up date. Writing lastCallAt
+  // is what moves the lead out of Active and into the Follow-ups tab.
+  const fields = followUpFieldsForCall(outcomes, FOLLOWUP_DEFAULT_DAYS);
+  const patch = Object.assign({}, fields, {
+    callCount: increment(1),
+    updatedAt: serverTimestamp()
+  });
+  updateDoc(doc(db, 'leads', leadId), patch)
+    .then(() => {
+      if(isTerminalStatus(fields.status)){
+        showToast(`Client Hub updated — moved to History (${fields.status})`);
+      }else{
+        const label = followUpLabel(fields.followUpDueDate);
+        showToast(`Client Hub updated — ${fields.status} · ${label.text.toLowerCase()}`);
+      }
+    })
+    .catch(err => {
+      console.error('Failed to update lead status in Client Hub', err);
+      showToast('Call logged, but the Client Hub status could not be updated');
+    });
+}
+
+/* Live subscription to the shared call history. Firestore surfaces local
+   writes immediately, so logging a call feels instant here while still
+   reaching the other person a moment later. */
+function startHistorySync(){
+  onSnapshot(historyCol, (snap) => {
+    historyList = snap.docs.map(d => migrateEntry(Object.assign({}, d.data(), { id: d.id })));
+    historyList.sort((a,b) => (b.updatedAt||b.createdAt||0) - (a.updatedAt||a.createdAt||0));
+    historySyncState = snap.metadata.fromCache ? 'offline' : 'live';
+    renderHistoryPanel();
+    renderCallLogPanel();
+  }, (err) => {
+    console.error('Firestore call-history sync failed', err);
+    historySyncState = 'error';
+    showToast('Lost connection to the shared call history');
+  });
+}
+
+function latestOutcomes(entry){
+  if(!entry.outcomeLog || !entry.outcomeLog.length) return [];
+  return entry.outcomeLog[entry.outcomeLog.length - 1].outcomes || [];
+}
+
+/* Flattens every business's call log into one sorted list of call entries —
+   the source data for the Call Log panel (as opposed to Call History, which
+   stays grouped by business). */
+function getAllCallLogEntries(){
+  const flat = [];
+  historyList.forEach(h => {
+    (h.outcomeLog || []).forEach(item => {
+      flat.push({ ...item, bizKey: h.key, bizName: h.bizName, phone: h.data && h.data.phone, historyId: h.id });
+    });
+  });
+  flat.sort((a,b) => b.at - a.at);
+  return flat;
+}
+
+/* Creates or refreshes the shared history document for a business. The write
+   is fire-and-forget: the onSnapshot listener is what updates the UI, so both
+   people converge on the same record. */
+function upsertHistory(d){
+  const key = (d.bizName || '').trim().toLowerCase();
+  if(!key) return;
+  const existing = historyList.find(h => h.key === key);
+  const payload = stripUndefined({
+    key,
+    bizName: d.bizName,
+    data: d,
+    tone: currentTone,
+    mode: currentMode,
+    updatedAt: Date.now(),
+    updatedBy: (currentUser() && currentUser().email) || null
+  });
+  if(existing){
+    updateDoc(historyRef(existing.id), payload)
+      .catch(err => { console.error('Failed to update call history', err); showToast('Could not save to shared history'); });
+  }else{
+    payload.outcomeLog = [];
+    payload.createdAt = Date.now();
+    addDoc(historyCol, payload)
+      .catch(err => { console.error('Failed to create call history', err); showToast('Could not save to shared history'); });
+  }
+}
+
+/* Appends a new call entry (never overwrites past attempts). Works both from
+   the active generated script AND directly from the history list without
+   needing to reopen the business first. The whole outcomeLog is rewritten
+   rather than using arrayUnion, because entries carry a client timestamp and
+   we want the appended item echoed back verbatim. */
+function logCall(key, outcomes, notes){
+  const entry = historyList.find(h => h.key === key);
+  if(!entry) return null;
+  const item = { id: 'c_' + Date.now() + '_' + Math.floor(Math.random()*10000), outcomes: outcomes.slice(), notes: (notes || '').trim(), at: Date.now() };
+  const nextLog = (entry.outcomeLog || []).concat([item]);
+  const nextData = Object.assign({}, entry.data || {}, { outcomes: outcomes.slice() });
+
+  if(lastData && (lastData.bizName || '').trim().toLowerCase() === key){
+    lastData.outcomes = outcomes.slice();
+  }
+
+  updateDoc(historyRef(entry.id), stripUndefined({
+    outcomeLog: nextLog,
+    data: nextData,
+    updatedAt: Date.now(),
+    updatedBy: (currentUser() && currentUser().email) || null
+  })).catch(err => { console.error('Failed to log call', err); showToast('Could not save that call to shared history'); });
+
+  return item;
+}
+
+function openHistoryEntry(id, jumpToFollowUp, entryOutcomes){
+  const entry = historyList.find(h => h.id === id);
+  if(!entry) return;
+  const d = entry.data;
+
+  /* Force back to Single mode so the fields we're about to populate are
+     actually visible — opening a business while the Bulk panel is showing
+     would otherwise fill in hidden inputs with no visible way to edit them. */
+  inputMode = 'single';
+  [...inputModeToggle.children].forEach(b => b.classList.toggle('active', b.dataset.inputMode === 'single'));
+  singleFields.style.display = 'block';
+  bulkFieldsEl.style.display = 'none';
+  generateBtnLabel.textContent = 'Generate Scripts';
+  formHintEl.textContent = '8 approaches · objection handlers · follow-up texts';
+
+  document.getElementById('bizName').value = d.bizName || '';
+  document.getElementById('ownerName').value = d.ownerFull || '';
+  document.getElementById('phoneNumber').value = d.phone || '';
+  document.getElementById('city').value = d.city || '';
+  document.getElementById('bizType').value = d.bizType || 'Contractor';
+  document.getElementById('bizType').dispatchEvent(new Event('change'));
+  document.getElementById('customType').value = d.customType || '';
+  document.getElementById('websiteUrl').value = d.hasSite ? (d.site || '') : (d.rawWebsiteInput || '');
+  document.getElementById('problems').value = d.problems || '';
+  document.getElementById('notes').value = d.notes || '';
+  document.getElementById('callGoal').value = d.goal || 'conversation';
+  document.getElementById('callbackTime').value = d.callbackTime || '';
+
+  currentTone = entry.tone || 'chill';
+  [...toneRow.children].forEach(b => b.classList.toggle('active', b.dataset.tone === currentTone));
+  currentMode = entry.mode || 'phone';
+  [...modeToggle.children].forEach(b => b.classList.toggle('active', b.dataset.mode === currentMode));
+
+  lastData = d;
+  lastData.outcomes = entryOutcomes || latestOutcomes(entry);
+  activeApproachIdx = 0;
+  activeClosingOutcome = 'interested';
+  showFollowUp = !!jumpToFollowUp;
+  regenSeeds = {};
+  pendingOutcomes = [];
+  pendingNotes = '';
+
+  renderHistoryPanel();
+  renderCallLogPanel();
+  render();
+  const followUpSection = jumpToFollowUp && document.getElementById('followUpSection');
+  (followUpSection || outputArea).scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function deleteHistoryEntry(id, evt){
+  if(evt) evt.stopPropagation();
+  if(!confirm('Delete this business from the shared call history? It disappears for everyone and can\'t be undone.')) return;
+  deleteDoc(historyRef(id))
+    .catch(err => { console.error('Failed to delete history entry', err); showToast('Could not delete that entry'); });
+}
+/* Minimal attribute escaper. A phone number should never contain a quote,
+   but these values are interpolated straight into an HTML attribute and the
+   data ultimately comes from a scraper — so it is escaped rather than
+   trusted. This page had no escaping helper before now. */
+function escAttr(v){
+  return String(v == null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Same 7-digit threshold used for duplicate matching in the Client Hub — long
+// enough to rule out a stray note or partial number typed into the phone field.
+function hasValidPhone(phone){
+  return (phone || '').replace(/\D/g,'').length >= 7;
+}
+
+function timeAgo(ts){
+  if(!ts) return '';
+  const diff = Date.now() - ts;
+  const min = Math.floor(diff/60000);
+  if(min < 1) return 'just now';
+  if(min < 60) return `${min}m ago`;
+  const hr = Math.floor(min/60);
+  if(hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr/24);
+  if(day < 7) return `${day}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function renderHistoryPanel(){
+  const container = document.getElementById('historyList');
+  if(!historyList.length){
+    container.innerHTML = `<div class="history-empty">No calls yet — generate a script and it'll show up here so you can reopen it or follow up later.</div>`;
+    return;
+  }
+  const activeKey = lastData ? (lastData.bizName || '').trim().toLowerCase() : null;
+  container.innerHTML = `<div class="history-list-scroll">` + historyList.map(h => {
+    const latest = latestOutcomes(h);
+    const count = (h.outcomeLog || []).length;
+    const tooltip = count ? h.outcomeLog.slice().reverse().map(item => `${new Date(item.at).toLocaleString()}: ${(item.outcomes||[]).map(o=>OUTCOME_LABELS[o]).join(' + ') || '(no outcome)'}${item.notes ? ' — "' + item.notes + '"' : ''}`).join('\n') : '';
+    const phone = h.data && h.data.phone;
+    const needsFollowUp = callNeedsFollowUp(latest);
+    return `
+    <div class="history-item ${h.key === activeKey ? 'active' : ''} ${needsFollowUp ? 'needs-followup' : ''}" data-id="${h.id}">
+      <div class="hi-row">
+        <div class="hi-main" title="${tooltip}">
+          <div class="hi-name">${h.bizName}${phone ? ` <button type="button" class="hi-tel" data-gv-call="${escAttr(phone)}" title="Copy ${phone} and open Google Voice">📞</button>` : ''}</div>
+          <div class="hi-meta">
+            ${latest.length ? latest.map(o=>`<span class="outcome-badge ob-${o}">${OUTCOME_LABELS[o]}</span>`).join('') : '<span>No outcome logged</span>'}
+            ${count > 1 ? `<span class="hi-count">× ${count} calls</span>` : ''}
+            <span>· ${timeAgo(h.updatedAt || h.createdAt)}</span>
+          </div>
+        </div>
+        ${needsFollowUp ? `<button class="hi-followup" data-followup-key="${h.id}" title="Needs a follow-up (${latest.map(o=>OUTCOME_LABELS[o]).join(' + ')}) — click to open and generate it">🔔 Follow Up</button>` : ''}
+        <button class="hi-del" data-del="${h.id}" title="Remove">×</button>
+      </div>
+      <select class="hi-outcome-select" data-key="${h.key}">
+        <option value="">Quick-log outcome…</option>
+        ${Object.keys(OUTCOME_LABELS).map(k=>`<option value="${k}">${OUTCOME_LABELS[k]}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('') + `</div>`;
+
+  container.querySelectorAll('.history-item').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      if(e.target.closest('select') || e.target.closest('button') || e.target.closest('a')) return;
+      openHistoryEntry(el.dataset.id);
+    });
+  });
+  container.querySelectorAll('.hi-outcome-select').forEach(sel=>{
+    sel.addEventListener('click', (e)=> e.stopPropagation());
+    sel.addEventListener('change', (e)=>{
+      e.stopPropagation();
+      if(!sel.value) return;
+      logCall(sel.dataset.key, [sel.value], '');
+      sel.value = '';
+      showToast('Call logged');
+    });
+  });
+  container.querySelectorAll('[data-followup-key]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      openHistoryEntry(btn.dataset.followupKey, true);
+    });
+  });
+  container.querySelectorAll('[data-gv-call]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); gvCall(btn.dataset.gvCall); });
+  });
+  container.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.addEventListener('click', (e)=> deleteHistoryEntry(btn.dataset.del, e));
+  });
+}
+
+/* Call Log: every logged call, flattened across all businesses, split into the
+   two categories the tabs show. Unlike Call History (grouped by business, one
+   row per business), this is one row per call — so "who do I need to follow
+   up with" and "what have I logged today" are both a quick scan, not a dig
+   through per-business tooltips. */
+function renderCallLogPanel(){
+  const listEl = document.getElementById('callLogList');
+  if(!listEl) return;
+
+  const all = getAllCallLogEntries();
+  const followup = all.filter(e => callNeedsFollowUp(e.outcomes));
+  const general = all.filter(e => !callNeedsFollowUp(e.outcomes));
+  const countFollowupEl = document.getElementById('cltCountFollowup');
+  const countGeneralEl = document.getElementById('cltCountGeneral');
+  if(countFollowupEl) countFollowupEl.textContent = followup.length;
+  if(countGeneralEl) countGeneralEl.textContent = general.length;
+
+  const list = callLogTab === 'general' ? general : followup;
+  if(!list.length){
+    listEl.innerHTML = `<div class="history-empty">${callLogTab === 'general' ? 'No general log entries yet — No Answer, Hung Up, and Not Interested calls will land here.' : "Nothing needs a follow-up right now — you're all caught up."}</div>`;
+    return;
+  }
+
+  listEl.innerHTML = `<div class="history-list-scroll">` + list.map(e => `
+    <div class="cl-item">
+      <div class="cl-name">${e.bizName}${e.phone ? ` <button type="button" class="hi-tel" data-gv-call="${escAttr(e.phone)}" title="Copy ${e.phone} and open Google Voice">📞</button>` : ''}</div>
+      <div class="hi-meta">
+        ${(e.outcomes||[]).map(o=>`<span class="outcome-badge ob-${o}">${OUTCOME_LABELS[o]}</span>`).join('')}
+        <span>· ${timeAgo(e.at)}</span>
+      </div>
+      ${e.notes ? `<div class="cl-notes">“${e.notes}”</div>` : ''}
+      <div class="cl-actions">
+        <button class="cl-btn" data-cl-open="${e.historyId}">Open</button>
+        ${callNeedsFollowUp(e.outcomes) ? `<button class="cl-btn cl-btn-accent" data-cl-followup="${e.historyId}" data-cl-outcomes='${JSON.stringify(e.outcomes)}'>🔔 Follow-Up</button>` : ''}
+      </div>
+    </div>
+  `).join('') + `</div>`;
+
+  listEl.querySelectorAll('[data-gv-call]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); gvCall(btn.dataset.gvCall); });
+  });
+  listEl.querySelectorAll('[data-cl-open]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openHistoryEntry(btn.dataset.clOpen));
+  });
+  listEl.querySelectorAll('[data-cl-followup]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const outcomes = JSON.parse(btn.dataset.clOutcomes);
+      openHistoryEntry(btn.dataset.clFollowup, true, outcomes);
+    });
+  });
+}
+
+const TONE_LABELS = { chill:'Chill', balanced:'Balanced', aggressive:'Bold' };
+/* Picks copy based on the active tone: chill / balanced / aggressive */
+function T(chill, balanced, aggressive){
+  if(currentTone === 'aggressive') return aggressive;
+  if(currentTone === 'balanced') return balanced;
+  return chill;
+}
+
+/* Regenerate support: each approach has one seed, but every V() call site passes
+   its own "salt" so different axes (descriptor / hook / stakes / etc.) inside the
+   same approach decorrelate instead of flipping in lockstep. A cheap integer hash
+   mixes seed+salt so incrementing the seed jumps unpredictably through each pool. */
+let regenSeeds = {};
+function V(key, arr, salt){
+  salt = salt || 0;
+  const seed = regenSeeds[key] || 0;
+  let h = (seed * 2654435761 + salt * 40503 + 12345) >>> 0;
+  h = (h ^ (h >>> 13)) >>> 0;
+  return arr[h % arr.length];
+}
+
+/* ---------------- Mode toggle ---------------- */
+const modeToggle = document.getElementById('modeToggle');
+modeToggle.addEventListener('click', (e)=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  [...modeToggle.children].forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentMode = btn.dataset.mode;
+  if(lastData) render();
+});
+
+/* ---------------- Custom Business Type toggle ---------------- */
+const bizTypeSelect = document.getElementById('bizType');
+const customTypeField = document.getElementById('customTypeField');
+bizTypeSelect.addEventListener('change', ()=>{
+  customTypeField.style.display = bizTypeSelect.value === 'Other' ? 'block' : 'none';
+});
+
+/* ---------------- Single / Bulk input toggle ---------------- */
+const inputModeToggle = document.getElementById('inputModeToggle');
+const singleFields = document.getElementById('singleFields');
+const bulkFieldsEl = document.getElementById('bulkFields');
+const generateBtnLabel = document.getElementById('generateBtnLabel');
+const formHintEl = document.getElementById('formHint');
+inputModeToggle.addEventListener('click', (e)=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  [...inputModeToggle.children].forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  inputMode = btn.dataset.inputMode;
+  singleFields.style.display = inputMode === 'single' ? 'block' : 'none';
+  bulkFieldsEl.style.display = inputMode === 'bulk' ? 'block' : 'none';
+  if(inputMode === 'bulk'){
+    generateBtnLabel.textContent = 'Generate All';
+    formHintEl.textContent = '8 approaches per business · saved to Call History';
+    renderBulkPreview();
+  } else {
+    generateBtnLabel.textContent = 'Generate Scripts';
+    formHintEl.textContent = '8 approaches · objection handlers · follow-up texts';
+  }
+});
+
+/* ---------------- Bulk paste live preview ---------------- */
+const bulkPasteEl = document.getElementById('bulkPaste');
+bulkPasteEl.addEventListener('input', renderBulkPreview);
+function renderBulkPreview(){
+  const container = document.getElementById('bulkPreview');
+  const text = bulkPasteEl.value;
+  if(!text.trim()){
+    container.innerHTML = `<div class="bulk-preview-empty">Paste rows above — a preview of what will be generated shows up here.</div>`;
+    return;
+  }
+  const { rows, hadHeader } = parseBulkText(text);
+  if(!rows.length){
+    container.innerHTML = `<div class="bulk-preview-empty">Couldn't find any rows with a business name. Check the first column has a name in it.</div>`;
+    return;
+  }
+  const rescuedCount = rows.filter(r => r._rescued).length;
+  container.innerHTML = `
+    <div class="bulk-preview-summary">${rows.length} business${rows.length===1?'':'es'} detected${hadHeader ? ' — header row recognized ✓' : ''}</div>
+    ${!hadHeader ? `<div class="bulk-preview-warning">⚠️ No header row detected — assuming column order <strong>Name, Type, Phone, Owner, Website, Notes</strong>. If that's not how your columns are ordered, add a header row (e.g. "Business Name, Type, Phone, Owner, Website, Notes") as the first line so columns are matched by name instead. <strong>Check the table below matches before generating.</strong></div>` : ''}
+    ${rescuedCount ? `<div class="bulk-preview-warning">⚠️ ${rescuedCount} row${rescuedCount>1?'s':''} couldn't be split into columns cleanly — double check ${rescuedCount>1?'them':'it'} below, marked with ⚠️.</div>` : ''}
+    <div class="bulk-preview-table-wrap">
+      <table class="bulk-preview-table">
+        <thead><tr><th>Name</th><th>Type</th><th>Phone</th><th>Owner</th><th>Website</th><th>Notes</th></tr></thead>
+        <tbody>
+          ${rows.map(r => {
+            const typeInfo = matchBizType(r.bizType || '');
+            const typeLabel = typeInfo.bizType === 'Other' ? (typeInfo.customType || '—') : typeInfo.bizType;
+            const siteLabel = (r.websiteUrl && detectHasWebsite(r.websiteUrl)) ? r.websiteUrl : 'No website';
+            return `<tr class="${r._rescued ? 'bpt-warn' : ''}">
+              <td>${r._rescued ? '⚠️ ' : ''}${r.bizName}</td>
+              <td>${typeLabel}</td>
+              <td>${r.phone || '—'}</td>
+              <td>${r.ownerFull || '—'}</td>
+              <td>${siteLabel}</td>
+              <td class="bpt-notes">${r.notes || '—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/* ---------------- Tone toggle ---------------- */
+const toneRow = document.getElementById('toneRow');
+toneRow.addEventListener('click', (e)=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  [...toneRow.children].forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentTone = btn.dataset.tone;
+});
+
+/* ---------------- Checklist ---------------- */
+document.getElementById('preChecklist').addEventListener('change', (e)=>{
+  const li = e.target.closest('li');
+  li.classList.toggle('checked', e.target.checked);
+});
+
+/* ---------------- Toast ---------------- */
+const toastEl = document.getElementById('toast');
+let toastTimer;
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>toastEl.classList.remove('show'), 1800);
+}
+
+function copyText(text, btnEl){
+  navigator.clipboard.writeText(text).then(()=>{
+    showToast('Copied to clipboard');
+    if(btnEl){
+      const orig = btnEl.textContent;
+      btnEl.textContent = '✓ Copied';
+      btnEl.classList.add('copied');
+      setTimeout(()=>{ btnEl.textContent = orig; btnEl.classList.remove('copied'); }, 1400);
+    }
+  }).catch(()=>{
+    showToast('Copy failed — select manually');
+  });
+}
+/* Thin wrapper over the shared implementation in forge-shared.js so every
+   call affordance on every page behaves identically. This page's showToast
+   takes a single message, which the shared helper is designed to accept. */
+function gvCall(phone){ callViaGoogleVoice(phone, (msg)=>showToast(msg)); }
+
+
+/* Business name + city is a far more reliable Maps query than a street
+   address would be here — this app never collects a full street address, and
+   guessing one from free-text notes would risk sending a call in the wrong
+   direction. Falls back to business name alone when no city was entered. */
+function openInGoogleMaps(bizName, city){
+  const query = city ? `${bizName}, ${city}` : bizName;
+  const url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query);
+  const win = window.open(url, '_blank');
+  if(!win) showToast('Popup blocked — allow popups for this site to open Google Maps');
+}
+
+/* ---------------- Helpers ---------------- */
+function pick(name, fallback){
+  const v = document.getElementById(name).value.trim();
+  return v || fallback;
+}
+function firstName(full){
+  if(!full) return '';
+  return full.split(' ')[0];
+}
+function cleanUrl(u){
+  if(!u) return '';
+  return u.replace(/^https?:\/\//,'').replace(/\/$/,'');
+}
+function detectHasWebsite(raw){
+  const v = (raw || '').trim().toLowerCase();
+  if(!v) return false;
+  const noSitePhrases = ['no website','no site','none','n/a','na','not yet','nope',"don't have","dont have",'no web','doesnt have','does not have'];
+  return !noSitePhrases.some(p => v.includes(p));
+}
+
+/* ---------------- Bulk Import Parsing ----------------
+   Handles two real-world paste shapes: rows copied straight out of Google
+   Sheets/Excel (tab-separated) and plain CSV. Header row is optional — if the
+   first row's cells look like column labels ("Business Name", "Phone", ...)
+   they're used to map columns; otherwise a fixed default order is assumed. */
+/* Checks several lines (not just the first) and several candidate delimiters,
+   picking whichever one splits the most lines into a consistent (>=2) cell
+   count. A single line is too easy to get unlucky on — e.g. a business name
+   containing a comma when the real delimiter is a tab. */
+/* Single-pass, quote-aware tokenizer for the whole pasted block — this is the
+   real fix. The previous version split into lines first and parsed each line
+   separately, which silently corrupts everything the moment any cell (e.g. a
+   multi-line Notes cell from Sheets/Excel) contains an embedded line break:
+   the row gets sliced apart at the wrong place before column-parsing ever
+   sees it. Tokenizing the entire text in one pass means a real newline only
+   ends a row when it's NOT inside an open quote, so multi-line cell content
+   stays attached to the row it belongs to. */
+function tokenizeDelimited(text, delim){
+  const rows = [];
+  let row = [];
+  let cur = '';
+  let inQuotes = false;
+  const n = text.length;
+  let i = 0;
+  while(i < n){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ cur += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      }
+      cur += c; i++; continue;
+    }
+    if(c === '"' && cur === ''){ inQuotes = true; i++; continue; }
+    if(c === delim){ row.push(cur.trim()); cur = ''; i++; continue; }
+    if(c === '\r'){ i++; continue; }
+    if(c === '\n'){ row.push(cur.trim()); cur = ''; rows.push(row); row = []; i++; continue; }
+    cur += c; i++;
+  }
+  row.push(cur.trim());
+  if(row.some(cell => cell !== '')) rows.push(row);
+  return rows.filter(r => r.some(cell => cell !== ''));
+}
+
+/* Tries tab / comma / semicolon and keeps whichever produces the most rows
+   that agree on the same (>=2) column count — checked across the whole paste
+   via the real tokenizer, not just a guess from the first line. */
+function detectDelimiter(text){
+  const candidates = ['\t', ',', ';'];
+  let best = '\t', bestScore = -1;
+
+  candidates.forEach(delim=>{
+    const rows = tokenizeDelimited(text, delim).slice(0, 20);
+    if(!rows.length) return;
+    const tally = {};
+    rows.forEach(r => { tally[r.length] = (tally[r.length]||0) + 1; });
+    let modeCount = 0, modeCells = 1;
+    Object.keys(tally).forEach(cells=>{
+      if(tally[cells] > modeCount){ modeCount = tally[cells]; modeCells = +cells; }
+    });
+    const score = modeCells >= 2 ? modeCount * modeCells : 0;
+    if(score > bestScore){ bestScore = score; best = delim; }
+  });
+
+  return best;
+}
+
+const BULK_HEADER_HINTS = {
+  bizName: ['business name','company name','company','biz name','business'],
+  ownerFull: ['owner name','owner','contact person','contact name','contact'],
+  phone: ['phone number','phone','cell','mobile','tel'],
+  bizType: ['type of business','business type','type','category','industry','trade','niche'],
+  websiteUrl: ['website','web site','url','domain','homepage','site'],
+  notes: ['notes','note','comment','description']
+};
+function matchHeaderCell(cell){
+  const c = (cell || '').toLowerCase().trim();
+  if(!c) return null;
+  for(const key in BULK_HEADER_HINTS){
+    if(BULK_HEADER_HINTS[key].some(hint => c.includes(hint))) return key;
+  }
+  if(c === 'name') return 'bizName';
+  return null;
+}
+
+const BIZTYPE_KEYWORDS = {
+  'Contractor': ['contractor','builder','construction','remodel','renovation'],
+  'Auto Repair': ['auto','mechanic','car repair','automotive','garage','tire'],
+  'Landscaping': ['landscap','lawn','yard','mowing'],
+  'Plumbing': ['plumb'],
+  'Electrical': ['electric'],
+  'Roofing': ['roof'],
+  'Sealcoating / Asphalt': ['seal','asphalt','paving','driveway'],
+  'HVAC': ['hvac','heating','cooling','air condition','furnace']
+};
+/* Free-typed type text -> a real dropdown category when it clearly matches one,
+   otherwise "Other" with the original text preserved as the custom type so it
+   still gets full industry-aware treatment via buildGenericIndustry(). */
+function matchBizType(raw){
+  const r = (raw || '').trim();
+  if(!r) return { bizType: 'Other', customType: '' };
+  const lower = r.toLowerCase();
+  for(const type in BIZTYPE_KEYWORDS){
+    if(BIZTYPE_KEYWORDS[type].some(k => lower.includes(k))) return { bizType: type, customType: '' };
+  }
+  return { bizType: 'Other', customType: r };
+}
+
+/* Last-resort safety net: if a row still came out as one big blob in bizName
+   (delimiter detection failed for that specific line — no tabs, no commas,
+   nothing to split on) instead of silently leaving 40+ characters of mixed
+   data sitting in the Business Name field, pull out anything that's clearly
+   a phone number or a website and give the rest back as the actual name. */
+const BULK_PHONE_RE = /(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
+const BULK_WEBSITE_RE = /\b(?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9-]*\.(?:com|net|org|biz|co|info|us)\b(?:\/[^\s,]*)?/i;
+function rescueOverloadedRow(obj){
+  if(Object.keys(obj).length > 1 || !obj.bizName || obj.bizName.length < 40) return obj;
+  let text = obj.bizName;
+  const result = { _rescued: true };
+
+  const phoneMatch = text.match(BULK_PHONE_RE);
+  if(phoneMatch){
+    result.phone = phoneMatch[0].trim();
+    text = text.replace(phoneMatch[0], ' ');
+  }
+  const siteMatch = text.match(BULK_WEBSITE_RE);
+  if(siteMatch){
+    result.websiteUrl = siteMatch[0].trim();
+    text = text.replace(siteMatch[0], ' ');
+  }
+  result.bizName = text.split(/[,;\t]/)[0].replace(/\s{2,}/g,' ').trim();
+  return result;
+}
+
+/* Absolute guarantee, independent of how parsing went: the Business Name
+   field can never end up holding a wall of text. If it's still implausibly
+   long after column-mapping and the regex rescue above, cut it at a word
+   boundary and move the overflow into Notes instead of silently keeping it
+   in the name — so the name field (and anything that displays it) can never
+   stretch the layout, no matter what was pasted. */
+const MAX_BIZNAME_LEN = 70;
+function capBizName(obj){
+  if(!obj.bizName || obj.bizName.length <= MAX_BIZNAME_LEN) return obj;
+  const cut = obj.bizName.slice(0, MAX_BIZNAME_LEN);
+  const lastSpace = cut.lastIndexOf(' ');
+  const head = (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trim();
+  const overflow = obj.bizName.slice(head.length).trim();
+  return {
+    ...obj,
+    bizName: head,
+    notes: [overflow, obj.notes].filter(Boolean).join(' — ')
+  };
+}
+
+/* Parses raw pasted text into an array of {bizName, ownerFull, phone, bizType,
+   websiteUrl, notes} row objects. Blank business names are dropped. */
+function parseBulkText(text){
+  if(!text.trim()) return { rows: [], hadHeader: false, totalLines: 0 };
+
+  const delim = detectDelimiter(text);
+  const rawRows = tokenizeDelimited(text, delim);
+  if(!rawRows.length) return { rows: [], hadHeader: false, totalLines: 0 };
+
+  const headerMatches = rawRows[0].map(matchHeaderCell);
+  const looksLikeHeader = headerMatches.filter(Boolean).length >= 2;
+
+  /* Business Name, Type, Phone, Owner, Website, Notes — used only when no
+     header row is present to map columns by name instead. */
+  const colMap = looksLikeHeader ? headerMatches : ['bizName','bizType','phone','ownerFull','websiteUrl','notes'];
+  const dataRows = looksLikeHeader ? rawRows.slice(1) : rawRows;
+
+  const rows = dataRows.map(cells => {
+    const obj = {};
+    colMap.forEach((key, i) => {
+      if(key && cells[i] !== undefined && cells[i] !== '') obj[key] = cells[i];
+    });
+    return capBizName(rescueOverloadedRow(obj));
+  }).filter(o => o.bizName);
+
+  return { rows, hadHeader: looksLikeHeader, totalLines: rawRows.length };
+}
+
+/* Turns one parsed bulk row into a full script-generator data object, reusing
+   the exact same pipeline (buildBusinessData) the single form uses. */
+function bulkRowToData(row){
+  const typeInfo = matchBizType(row.bizType || '');
+  return buildBusinessData({
+    bizName: row.bizName,
+    ownerFull: row.ownerFull || '',
+    phone: row.phone || '',
+    bizType: typeInfo.bizType,
+    customType: typeInfo.customType,
+    websiteUrl: row.websiteUrl || '',
+    problems: '',
+    notes: row.notes || '',
+    goal: document.getElementById('callGoal').value,
+    callbackTime: ''
+  });
+}
+
+/* ---------------- Industry Intelligence ----------------
+   Real per-trade language: how people search, what they lose,
+   what a blank "problems" field should default to, and a couple
+   of sharp hook questions instead of generic filler. */
+const INDUSTRY_PROFILES = {
+  'Contractor': {
+    niche: 'contractor', plural: 'contractors', localTag: 'a couple contractors here in Bucks County',
+    loses: 'the estimate', occasion: 'a project comes up',
+    defaultProblem: "your site doesn't make it easy to request a quote or see photos of past jobs",
+    hooks: [
+      "when someone's ready to hire a contractor, are they finding your work, or somebody else's?",
+      "when a homeowner searches for a contractor around here, is your name the one that shows up?",
+      "if you had to guess, how many of your jobs this year came from someone finding you online versus word of mouth?"
+    ]
+  },
+  'Auto Repair': {
+    niche: 'auto shop', plural: 'auto shops', localTag: 'a few auto shops around Bucks County',
+    loses: 'the appointment', occasion: 'their car starts acting up',
+    defaultProblem: "your site doesn't show your hours or let people book a repair online",
+    hooks: [
+      "when someone's car breaks down nearby, are they finding you first, or the shop up the road?",
+      "when someone searches \"auto repair near me,\" is your shop the one that pops up, or a competitor's?",
+      "if someone's check engine light comes on right now, would they find you first, or someone else?"
+    ]
+  },
+  'Landscaping': {
+    niche: 'landscaper', plural: 'landscapers', localTag: 'a couple landscaping crews around here',
+    loses: 'the job', occasion: 'the season picks up',
+    defaultProblem: "your site doesn't show your service area or make it easy to request a quote",
+    hooks: [
+      "when someone's looking for a landscaper this time of year, are they finding you, or whoever shows up first on Google?",
+      "when a new homeowner searches for lawn care around here, is it your crew that comes up?",
+      "how many quotes do you think you're missing right now just because people can't find you online?"
+    ]
+  },
+  'Plumbing': {
+    niche: 'plumber', plural: 'plumbers', localTag: 'a couple plumbers in the area',
+    loses: 'the call', occasion: 'a pipe bursts',
+    defaultProblem: "your site doesn't make it obvious you handle emergency calls, and there's no way to request service online",
+    hooks: [
+      "when a pipe bursts at 9pm, are people finding your number, or the next plumber on Google?",
+      "when someone's got a plumbing emergency, is your name the first one they see?",
+      "if someone's basement started flooding right now, would they find your number in ten seconds?"
+    ]
+  },
+  'Electrical': {
+    niche: 'electrician', plural: 'electricians', localTag: 'a couple electricians around Bucks County',
+    loses: 'the job', occasion: 'they need something wired safely',
+    defaultProblem: "your site doesn't list your services clearly or make it easy to request an estimate",
+    hooks: [
+      "when someone's got an electrical issue, are they finding you first, or whoever ranks higher on Google?",
+      "when a homeowner searches for a licensed electrician nearby, is it your name that comes up?",
+      "if the power went out for someone right now, would they know to call you?"
+    ]
+  },
+  'Roofing': {
+    niche: 'roofer', plural: 'roofing crews', localTag: 'a couple roofing crews in the area',
+    loses: 'the job', occasion: 'a storm rolls through',
+    defaultProblem: "your site doesn't show before/after photos or make it easy to request an inspection",
+    hooks: [
+      "after a storm comes through, are homeowners finding you first, or the roofer who shows up first in search?",
+      "when someone needs a roof inspection, is your crew the one they call?",
+      "how many roofs do you think you're losing to whoever answers the phone first after a storm?"
+    ]
+  },
+  'Sealcoating / Asphalt': {
+    niche: 'sealcoating company', plural: 'sealcoating crews', localTag: 'a couple sealcoating crews in the area',
+    loses: 'the job', occasion: 'their driveway starts cracking',
+    defaultProblem: "your site doesn't show your service area or before/after photos, and there's no way to request a quote",
+    hooks: [
+      "when someone's driveway needs sealing before it cracks worse, are they finding you, or whoever shows up first on Google?",
+      "when a homeowner searches for sealcoating around here, is your crew the one that comes up?",
+      "how many driveways a season do you think you're losing just to whoever ranks higher on Google?"
+    ]
+  },
+  'HVAC': {
+    niche: 'HVAC company', plural: 'HVAC companies', localTag: 'a couple HVAC companies around Bucks County',
+    loses: 'the call', occasion: 'the heat or AC goes out',
+    defaultProblem: "your site doesn't make it obvious you handle emergency repairs, and there's no way to request service online",
+    hooks: [
+      "when someone's AC dies in July, are they finding you first, or the next HVAC company on Google?",
+      "when the heat goes out in the middle of winter, is your number the one they find?",
+      "if someone's furnace died tonight, would they find your number, or the next guy's?"
+    ]
+  }
+};
+
+/* Pulls the cleanest single search-term out of a free-typed business type,
+   e.g. "Sealcoating / Asphalt Repair" -> "sealcoating", "Power Washing" -> "power washing".
+   Used so generated copy reads "sealcoating" instead of the whole raw label. */
+function primaryTerm(label){
+  const first = label.split(/\/|,|&|\band\b/i)[0].trim();
+  return (first || label).toLowerCase();
+}
+/* Builds an industry profile on the fly for a free-typed "Other" type. Uses the
+   same shape as the curated profiles (occasion / loses / defaultProblem / hooks)
+   instead of one flat generic sentence, so untyped trades still get specific,
+   trade-flavored copy — just generated from the label instead of hand-curated. */
+function buildGenericIndustry(label){
+  const primary = primaryTerm(label);
+  const display = label.trim();
+  return {
+    niche: primary,
+    plural: `${primary} businesses like yours`,
+    localTag: `a couple ${primary} businesses around here`,
+    loses: 'the job',
+    occasion: `someone needs ${primary} done`,
+    defaultProblem: `your site doesn't make it easy to see what you offer, check your work, or get in touch about ${primary}`,
+    hooks: [
+      `when someone needs ${primary} done, are they finding you, or somebody else?`,
+      `when someone searches for ${primary} around here, is your name the one that shows up?`,
+      `how many ${primary} jobs do you think you're losing just to whoever shows up first on Google?`
+    ]
+  };
+}
+
+function getIndustry(d){
+  if(d.bizType === 'Other' && d.customType && d.customType.trim()){
+    return buildGenericIndustry(d.customType);
+  }
+  return INDUSTRY_PROFILES[d.bizType] || buildGenericIndustry(d.bizType || 'what you do');
+}
+function typeVerb(type){
+  return (INDUSTRY_PROFILES[type] || {}).plural || 'local businesses';
+}
+function localProof(type){
+  return (INDUSTRY_PROFILES[type] || {}).localTag || 'a couple local businesses around here';
+}
+
+const GOAL_LABELS = {
+  calendly: 'Book a Calendly Call',
+  portfolio: 'Get Permission to Send Portfolio',
+  conversation: 'Just Start a Conversation',
+  qualify: 'Qualify If Good Fit'
+};
+
+/* Every branch ends by anchoring an actual time — d.callbackTime when the
+   user supplied one, otherwise a concrete near-term window. "Just start a
+   conversation" used to dead-end on "mind if I follow up sometime"; booking
+   a short call is the mission now, so even the low-pressure goals still ask
+   for a real slot, just gentler about it. */
+function goalCTA(d){
+  const timeOption = d.callbackTime || T(
+    "later today or tomorrow",
+    "later today or tomorrow",
+    "today or tomorrow"
+  );
+  switch(d.goal){
+    case 'calendly':
+      return T(
+        `Want me to send a booking link? Grab whatever time works, even ${timeOption}.`,
+        `I'll send a booking link. Grab a time, even ${timeOption}.`,
+        `I'll send a link right now. Grab whatever's open ${timeOption}.`
+      );
+    case 'portfolio':
+      return T(
+        `Mind if I send a couple examples? I'll follow up ${timeOption} to hear what you think.`,
+        `Cool if I send a couple examples? I'll check back ${timeOption}.`,
+        `I'll send a few examples. I'll call you ${timeOption} for a real answer.`
+      );
+    case 'qualify':
+      return T(
+        `Quick question — is this a soon thing, or a someday thing? If soon, can I grab 10 minutes ${timeOption}?`,
+        `Soon, or someday? If soon, I can grab 10 minutes ${timeOption}.`,
+        `Soon, or someday? If soon, let's lock in 10 minutes ${timeOption}.`
+      );
+    default: // conversation
+      return T(
+        `No pressure. Can I grab 5 minutes ${timeOption} to show you?`,
+        `Not looking for a decision now. Can I grab a few minutes ${timeOption}?`,
+        `Not pushing anything. Let's grab 5 minutes ${timeOption} so you can see it.`
+      );
+  }
+}
+
+/* ---------------- Objection Handlers (tone-aware) ---------------- */
+function buildObjections(tone, d){
+  const cbTime = d && d.callbackTime;
+  const base = {
+    chill: [
+      {q:"“We're too busy right now.”", a:"Get it, I'll be quick. Fifteen seconds — noticed something on your site worth knowing. Can I say it?"},
+      {q:"“I already have a website.”", a:"Most people do. Not saying scrap it. Noticed a couple things costing you calls. Worth two minutes?"},
+      {q:"“I'm not interested.”", a:"All good. Can I leave you my number, in case that changes? Two seconds."},
+      {q:"“Call me back later.”", a: cbTime ? `No worries — I'll catch you ${cbTime}. That work?` : "For sure. What's usually better — morning, or after you close up?"},
+      {q:"“How much does it cost?”", a:"Usually $1,000 to $1,500 depending on what you need. I'll give you an exact number once I see what you're looking for."},
+      {q:"“Send me some info.”", a:"Yeah, can do. Best number or email? I'll keep it short."},
+      {q:"“We're happy with what we have.”", a:"Good to hear — a lot of shops aren't. Quick one though — is it actually bringing calls, or just sort of there?"},
+      {q:"“Who are you again?”", a:"My bad — [Your Name], Forge Digital. I build and fix websites for local businesses around Bucks County. Saw something on your site worth mentioning."}
+    ],
+    balanced: [
+      {q:"“We're too busy right now.”", a:"Understood. Fifteen seconds — noticed something on your site worth flagging. Mind if I say it?"},
+      {q:"“I already have a website.”", a:"Makes sense, not saying replace it. Noticed a couple things costing you calls. Want me to run through it?"},
+      {q:"“I'm not interested.”", a:"No problem. Mind if I leave my number anyway, in case that changes?"},
+      {q:"“Call me back later.”", a: cbTime ? `Sounds good — I'll catch you ${cbTime}. That work?` : "Sure thing. Better time — morning, or after you close up?"},
+      {q:"“How much does it cost?”", a:"$1,000 to $1,500 depending on what you need. I'll give an exact number once I see what you're looking for."},
+      {q:"“Send me some info.”", a:"Sure — best number or email? I'll keep it short."},
+      {q:"“We're happy with what we have.”", a:"Good to hear — a lot of shops aren't. Quick question — is it actually bringing calls, or just sitting there?"},
+      {q:"“Who are you again?”", a:"Fair — [Your Name], Forge Digital. I build and fix websites for local businesses around Bucks County. Saw something on your site worth flagging."}
+    ],
+    aggressive: [
+      {q:"“We're too busy right now.”", a:"Ten seconds. You're losing money right now, for a reason I can name in one sentence. Worth ten seconds?"},
+      {q:"“I already have a website.”", a:"And it's costing you money every day it sits like that. Not selling you a new one — telling you what's broken. Two minutes."},
+      {q:"“I'm not interested.”", a:"Fair. Most guys aren't, until they see what it's costing them. Fifteen seconds, then I'm gone."},
+      {q:"“Call me back later.”", a: cbTime ? `Got it — I'll catch you ${cbTime}. Still good?` : "I'll hold you to it. What time? I'll text so it actually happens."},
+      {q:"“How much does it cost?”", a:"$1,000 to $1,500 depending on what you need. Way less than what you're losing now. No games, no agency markup."},
+      {q:"“Send me some info.”", a:"I can, but it'll sit unread — that's just real. Two minutes now, you'll actually know."},
+      {q:"“We're happy with what we have.”", a:"Happy's fine. Is it making you money, or just sitting there looking okay? Not the same thing."},
+      {q:"“Who are you again?”", a:"[Your Name], Forge Digital. I fix websites quietly losing local businesses money. Yours has a couple of those problems."}
+    ]
+  };
+  return base[tone];
+}
+
+function renderObjections(d){
+  const list = buildObjections(currentTone, d);
+  const container = document.getElementById('objectionsList');
+  container.innerHTML = list.map((o,i)=>`
+    <div class="objection">
+      <div class="q">${o.q}
+        <button class="copy-mini" data-obj="${i}">Copy</button>
+      </div>
+      <div class="a">${o.a}</div>
+    </div>
+  `).join('');
+  container.querySelectorAll('.copy-mini').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = +btn.dataset.obj;
+      copyText(list[idx].a, btn);
+    });
+  });
+}
+toneRow.addEventListener('click', ()=>renderObjections(lastData));
+renderObjections();
+renderHistoryPanel();
+
+const callLogTabsEl = document.getElementById('callLogTabs');
+callLogTabsEl.addEventListener('click', (e)=>{
+  const btn = e.target.closest('.clt-btn');
+  if(!btn) return;
+  callLogTab = btn.dataset.cltab;
+  [...callLogTabsEl.children].forEach(b => b.classList.toggle('active', b === btn));
+  renderCallLogPanel();
+});
+renderCallLogPanel();
+
+/* ---------------- Pricing Guidance ---------------- */
+document.getElementById('pricingCopyBtn').addEventListener('click', (e)=>{
+  copyText(document.getElementById('pricingLine').textContent, e.target);
+});
+
+/* ---------------- Approach Script Builders ---------------- */
+/* Each builder returns {title, desc, opening, middle, close, afterAnswer} for phone,
+   and {title, desc, opening, middle, close} for in-person */
+
+/* Notes About the Business is free text (e.g. "been open 15 years, family-owned,
+   lots of good reviews"). It's woven in as a short aside on the approaches where
+   rapport/credibility matters most — Local Proof, Social Proof, Honest New Business —
+   using the same tone voice as the rest of that approach. Never forces the text
+   into a shape it doesn't fit; if blank, contributes nothing. */
+function notesClause(d, style){
+  if(!d.notes || !d.notes.trim()) return '';
+  const n = d.notes.trim().replace(/[.\s]+$/,'');
+  const byStyle = {
+    localproof: T(` Also saw ${n}. That's my kind of shop.`, ` Also — ${n}. Exactly what I look for.`, ` And ${n}. My kind of shop.`),
+    socialproof: T(` Plus ${n}. Good sign.`, ` Plus ${n}.`, ` And ${n}. Says a lot.`),
+    honest: T(` Also saw ${n}. Figured that was worth a call.`, ` Also saw ${n}. Worth reaching out.`, ` Also saw ${n}. Good reason to call.`),
+    lc: T(` Also — ${n}. Worth mentioning.`, ` Also, ${n}.`, ` And ${n}. Worth knowing.`)
+  };
+  return byStyle[style] || '';
+}
+
+/* ---------------- LC Approach (Kai Stone style) ----------------
+   The one approach whose only job is booking a short callback — never
+   selling the site on this call. Pattern-interrupt open, one sharp reason,
+   a soft no-pressure offer, a close that locks a real time, and objection
+   handling that agrees first, then reframes toward that same booked time.
+   Regenerate variety follows the same salted-V() pattern as every other
+   approach; the 5 embedded objections stay tone-branched but static, same
+   as the sidebar's objection set. */
+function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+/* a.title is shown with " Approach" appended in a few places (tab header,
+   full-script copy, export). LC's title already ends in "Approach", so this
+   guards against "LC Approach Approach". */
+function approachHeading(title){
+  return /approach$/i.test(title.trim()) ? title : `${title} Approach`;
+}
+
+const LC_INTERRUPT_OPTS = [
+  "quick heads up, this is a cold call",
+  "full disclosure, cold call",
+  "I'll be straight up, this is a cold call"
+];
+const LC_PERMISSION_OPTS = [
+  "got 15 seconds?",
+  "short one though, got 15 seconds?",
+  "won't take long, got 15 seconds?"
+];
+const LC_REASON_LEAD_OPTS = [
+  "Here's why I'm calling.",
+  "Quick reason I'm calling.",
+  "So, here's why."
+];
+const LC_OFFER_OPTS = [
+  "no pitch, just want to show you something",
+  "not selling anything on this call, just want to show you something",
+  "nothing to buy here, just want to show you something"
+];
+const LC_STAKES_OPTS = [
+  "people don't look twice, they call whoever they find first",
+  "nobody really shops around, first name they see usually wins",
+  "people just go with whoever pops up first"
+];
+const LC_TIME_OPTS = [
+  "later today or tomorrow morning",
+  "tomorrow morning or afternoon",
+  "tomorrow, or the day after"
+];
+
+/* Five objections LC needs to be especially good at. Agree first, then
+   reframe back toward the same 10-minute ask — never argue the point. */
+function buildLcObjections(d){
+  const industry = getIndustry(d);
+  const niche = industry.niche;
+  const probs = d.problems;
+  const defaultProblem = industry.defaultProblem;
+  const site = d.site;
+  const hasSite = d.hasSite;
+
+  return [
+    {
+      q: "“We're too busy right now.”",
+      a: T(
+        "Get it. That's why I'm asking for 10 minutes, not an hour. Can we still find a slot?",
+        "Makes sense. That's why it's 10 minutes, not a full call. Can we find a quick slot?",
+        "Get it. 10 minutes, not an hour. Worth that much?"
+      )
+    },
+    {
+      q: "“We already have enough business.”",
+      a: T(
+        "That's great, honestly. But busy now doesn't mean busy in six months. This is about staying ahead of that. Worth a quick look?",
+        "Good to hear. But the shops that wait till it slows down are always behind. Worth 10 minutes either way?",
+        "Good. But busy now and busy later aren't the same thing. Ten minutes now beats scrambling later."
+      )
+    },
+    {
+      q: "“Just send me info.”",
+      a: T(
+        "I can. But it'll just sit in your inbox. Ten minutes, I show you the real thing instead. Work better?",
+        "I can do that. Realistically it goes unread though. A quick call, I show you the actual example. Better?",
+        "I could. But it'll sit unread. Ten minutes, I show you live, you decide right there."
+      )
+    },
+    {
+      q: "“How much does it cost?”",
+      a: T(
+        "Fair question. Usually $1,000 to $1,500 depending on what you need. I'd rather show you what you're getting first. Ten minutes?",
+        "Good question. Most sites run $1,000 to $1,500. I'd rather you see it before we talk price. Ten minutes first?",
+        "$1,000 to $1,500 depending on scope. But a number means nothing without seeing it. Ten minutes, then it makes sense."
+      )
+    },
+    {
+      q: "“We already have a Facebook / website.”",
+      a: hasSite ? T(
+        `Saw ${site}. Good that it's up. But ${probs ? probs.toLowerCase() : defaultProblem}. That's the actual reason I called. Worth a quick look?`,
+        `Saw ${site}. Good start. But ${probs ? probs.toLowerCase() : defaultProblem}. That's why I reached out. Ten minutes?`,
+        `Saw it. Better than nothing. But ${probs ? probs.toLowerCase() : defaultProblem}. Ten minutes, I'll show you what's missing.`
+      ) : T(
+        `Facebook's better than nothing. But it doesn't show up when someone Googles "${niche} near me." A real site does. That's why I called.`,
+        `Facebook's a start. But it won't show up in Google search, and that's where most people actually look. Ten minutes?`,
+        `Facebook's fine. But it's not showing up on Google. A real site would. Ten minutes, I'll show you what you're missing.`
+      )
+    }
+  ];
+}
+
+/* LC's close: always goal-aware, always trying to lock an actual time —
+   two options instead of an open-ended "whenever works for you." */
+function lcClose(d, mode){
+  const timeOption = d.callbackTime || V('lc', LC_TIME_OPTS, 6);
+  const ask = mode === 'inperson' ? T(
+    `Rather than stand here going back and forth — can I grab 10 minutes with you ${timeOption}? Or right now if you've got it.`,
+    `Rather than get into it right here. Ten minutes with you ${timeOption}? Now works too.`,
+    `Ten minutes with you ${timeOption}. Or right now if you've got it. I'll show you properly.`
+  ) : T(
+    `Rather than explain it all over the phone — can I grab 10 minutes with you ${timeOption} and just show you?`,
+    `Rather than go back and forth on the phone. Ten minutes with you ${timeOption}? I'll just show you.`,
+    `Ten minutes with you ${timeOption}. I'll show you live instead of talking in circles.`
+  );
+  switch(d.goal){
+    case 'calendly':
+      return T(
+        `${ask} Or easier — I text you a link, you grab whatever slot's open.`,
+        `${ask} Or I send a booking link and you pick a slot.`,
+        `${ask} Or skip it — I'll send a link, you pick the slot.`
+      );
+    case 'portfolio':
+      return T(
+        `Actually, easier — mind if I send a couple examples first? Then I'll grab 10 minutes ${timeOption} to hear what you think.`,
+        `Or — mind if I send examples first? I'll follow up ${timeOption} to hear your thoughts.`,
+        `Here's what we do — I send examples first, then grab you ${timeOption} for a real answer.`
+      );
+    case 'qualify':
+      return T(
+        `Quick check first — soon, or someday? If it's soon, I'll grab 10 minutes ${timeOption} and show you.`,
+        `First — is this a soon thing, or a someday thing? If soon, I can grab 10 minutes ${timeOption}.`,
+        `Soon, or someday? If soon, let's grab 10 minutes ${timeOption}. No wasted time either way.`
+      );
+    default:
+      return ask;
+  }
+}
+
+function buildApproaches(d){
+  const biz = d.bizName;
+  const ownerAddr = d.ownerFirst || "there";
+  const probs = d.problems;
+  const site = d.site;
+  const hasSite = d.hasSite;
+  const industry = getIndustry(d);
+  const niche = industry.niche;
+  const verb = industry.plural;
+  const proof = industry.localTag;
+  const defaultProblem = industry.defaultProblem;
+  const loses = industry.loses;
+
+  /* Every problem mention is its own short sentence — never buried mid-clause —
+     so problemLine() always returns a clean, capitalized, standalone line. */
+  const problemLine = (p) => p ? cap(p.trim().toLowerCase().replace(/\.$/, '')) + '.' : cap(defaultProblem) + '.';
+
+  const approaches = [];
+
+  /* 0. LC Approach — the flagship. Books the call, doesn't sell on it. */
+  const lcInterrupt = V('lc', LC_INTERRUPT_OPTS, 1);
+  const lcPermission = V('lc', LC_PERMISSION_OPTS, 2);
+  const lcReasonLead = V('lc', LC_REASON_LEAD_OPTS, 3);
+  const lcOffer = V('lc', LC_OFFER_OPTS, 4);
+  const lcStakes = V('lc', LC_STAKES_OPTS, 5);
+  const lcNotes = notesClause(d, 'lc');
+  approaches.push({
+    key:'lc',
+    title:'LC Approach',
+    desc:"Books the call, doesn't sell the site. Pattern-interrupt open, one reason, a soft no-pressure offer, a close that locks a real time. Objections get agreed with, then reframed — never argued.",
+    afterAnswer: T(
+      `Hey, is this ${ownerAddr}? ${cap(lcInterrupt)}. ${cap(lcPermission)}`,
+      `Hey ${ownerAddr}, this is ${d.name}. ${cap(lcInterrupt)}. ${cap(lcPermission)}`,
+      `${ownerAddr} — ${cap(lcInterrupt)}. ${cap(lcPermission)}`
+    ),
+    opening: hasSite ? T(
+      `${lcReasonLead} I pulled up ${site} before calling. ${problemLine(probs)} Small thing, but ${lcStakes}.`,
+      `${lcReasonLead}\nI looked at ${site} before calling.\n${problemLine(probs)}\nSmall thing, but ${lcStakes}.`,
+      `${lcReasonLead} I looked at ${site} first. ${problemLine(probs)} ${cap(lcStakes)}.`
+    ) : T(
+      `${lcReasonLead} I looked for ${biz} online before calling. No website came up. Small thing, but ${lcStakes}.`,
+      `${lcReasonLead}\nI looked for ${biz} online.\nNo website came up.\nSmall thing, but ${lcStakes}.`,
+      `${lcReasonLead} I looked for ${biz} online. Nothing came up. ${cap(lcStakes)}.`
+    ),
+    middle: (hasSite ? T(
+      `${cap(lcOffer)}. I build sites for ${verb} around here. I'll put together a free example of ${site} fixed up. No charge. If it's not for you, that's fine.`,
+      `${cap(lcOffer)}.\nI build sites for ${verb} around here.\nFree example of ${site} fixed up.\nNo charge, no obligation.`,
+      `${cap(lcOffer)}. I fix exactly this for ${verb} around here. Free example of ${site} fixed up. Hate it, ignore me.`
+    ) : T(
+      `${cap(lcOffer)}. I build sites for ${verb} around here. I'll put together a free example for ${biz}. No charge. If it's not for you, that's fine.`,
+      `${cap(lcOffer)}.\nI build sites for ${verb} around here.\nFree example for ${biz}.\nNo charge, no obligation.`,
+      `${cap(lcOffer)}. I build exactly this for ${verb} around here. Free example for ${biz}. Hate it, ignore me.`
+    )) + lcNotes,
+    close: lcClose(d),
+    objections: buildLcObjections(d)
+  });
+
+  /* 1. Problem-Spotting */
+  approaches.push({
+    key:'problem',
+    title:'Problem-Spotting',
+    desc: hasSite
+      ? 'Lead with the specific thing you found broken. Direct, credible, hard to brush off.'
+      : 'Lead with the fact they have no online presence at all. Direct, credible, hard to brush off.',
+    afterAnswer: T(
+      `Hey, is this ${ownerAddr}? This is ${d.name} with Forge Digital.`,
+      `Hey, is this ${ownerAddr}? ${d.name}, Forge Digital. Got 30 seconds?`,
+      `${ownerAddr}? ${d.name}, Forge Digital. 30 seconds?`
+    ),
+    opening: hasSite ? T(
+      `I'm looking at ${site} right now. ${problemLine(probs)}`,
+      `I'm looking at ${site} right now.\n${problemLine(probs)}`,
+      `Looking at ${site} right now. ${problemLine(probs)}`
+    ) : T(
+      `I'm looking for ${biz} online right now. No website comes up.`,
+      `I'm looking for ${biz} online right now.\nNo website comes up.`,
+      `Looking for ${biz} online right now. Nothing comes up.`
+    ),
+    middle: hasSite ? T(
+      `That means people search, don't find it, call the next ${niche}. You'd never even know you lost ${loses}. I fix this for ${verb} around here. Fast, and cheaper than people expect.`,
+      `People search.\nDon't find it.\nCall the next ${niche} instead.\nYou'd never know you lost ${loses}.\nI fix this for ${verb} around here.`,
+      `People search, don't find it, call the next guy. You lose ${loses} and never even know. I fix this for ${verb} around here. Fast. Cheap.`
+    ) : T(
+      `That means when someone searches "${niche} near me," you don't show up. They call a competitor instead. I build simple sites for ${verb} around here. Fast, and cheaper than people expect.`,
+      `Someone searches "${niche} near me."\nYou don't show up.\nThey call a competitor instead.\nI build simple sites for ${verb} around here.`,
+      `Search "${niche} near me" and you're invisible. Competitor gets the call. I build sites for ${verb} around here. Fast. Cheap. Pays for itself.`
+    ),
+    close: (hasSite ? T(
+      `Want me to send a couple screenshots of what I mean? `,
+      `I can send a couple screenshots.\nTwo minutes. `,
+      `I'll send a quick before/after. `
+    ) : T(
+      `Want me to put together a quick example for ${biz}? `,
+      `I can put together a quick example for ${biz}.\nTwo minutes. `,
+      `I'll mock up a quick example real fast. `
+    )) + goalCTA(d)
+  });
+
+  /* 2. Curiosity Hook */
+  const curiosityHook = V('curiosity', industry.hooks, 4);
+  const REASON_LEAD_OPTS = ["Reason I ask —", "Here's why I'm asking —", "Here's why —"];
+  const curiosityReasonLead = V('curiosity', REASON_LEAD_OPTS, 5);
+  approaches.push({
+    key:'curiosity',
+    title:'Curiosity Hook',
+    desc:'Lead with a sharp, industry-specific question that\'s hard to brush off — no survey-style filler.',
+    afterAnswer: `Hey, is this ${ownerAddr}? ${d.name}. Got a quick question.`,
+    opening: T(
+      `Quick one — ${curiosityHook}`,
+      `Quick one.\n${cap(curiosityHook)}`,
+      `Quick one: ${curiosityHook}`
+    ),
+    middle: hasSite ? T(
+      `${curiosityReasonLead} I'm looking at ${site} right now. ${problemLine(probs)} That's real business going to whoever shows up first on Google. I fix that for ${verb} around here.`,
+      `${curiosityReasonLead}\nI'm looking at ${site} right now.\n${problemLine(probs)}\nThat's business going to whoever shows up first on Google.`,
+      `${curiosityReasonLead} Looking at ${site} right now. ${problemLine(probs)} That's jobs walking to a competitor. I fix this for ${verb} around here.`
+    ) : T(
+      `${curiosityReasonLead} I'm looking for ${biz} online right now. No website. That means people searching for a ${niche} find your competitors instead. I fix that for ${verb} around here.`,
+      `${curiosityReasonLead}\nI'm looking for ${biz} online right now.\nNo website.\nThat means people searching for a ${niche} find your competitors instead.`,
+      `${curiosityReasonLead} Looking for ${biz} online right now. Nothing. Every search for a ${niche} goes to a competitor. I fix that for ${verb} around here.`
+    ),
+    close: `I'll show you exactly what I mean. No obligation. ` + goalCTA(d)
+  });
+
+  /* 3. Local Proof */
+  approaches.push({
+    key:'localproof',
+    title:'Local Proof',
+    desc:'Use nearby, similar businesses as social proof to build instant trust and relevance.',
+    afterAnswer: `Hey, is this ${ownerAddr}? ${d.name}. I work with ${proof}.`,
+    opening: `I build sites for ${verb}, including ${proof}. Your name came up.`,
+    middle: (hasSite ? T(
+      `I'm looking at ${site} right now. ${problemLine(probs)} Same thing I fixed for a couple shops nearby. Made a real difference.`,
+      `I'm looking at ${site} right now.\n${problemLine(probs)}\nSame thing I fixed for shops nearby.\nMade a real difference.`,
+      `Looking at ${site} right now. ${problemLine(probs)} Same fix I made for other shops nearby. Real difference in calls.`
+    ) : T(
+      `I noticed ${biz} doesn't have a site yet. Same spot a few other ${verb} were in before I built them one. Made a real difference in their calls.`,
+      `${biz} doesn't have a site yet.\nSame spot a few other ${verb} were in.\nBefore I built them one.\nMade a real difference in their calls.`,
+      `${biz} doesn't have a site right now. Every competitor that does is getting calls you're not.`
+    )) + notesClause(d, 'localproof'),
+    close: T(
+      `Figured since I'm already working with shops like yours, it made sense to reach out. `,
+      `I'm already in this space with shops like yours.\nMade sense to reach out. `,
+      `I'm already working with shops like yours. Figured I'd reach out. `
+    ) + goalCTA(d)
+  });
+
+  /* 4. Honest New Business */
+  const HONEST_ANGLE_OPTS = [
+    'Kind of a good time to work with someone like me, honestly.',
+    "You'd get more attention than a bigger shop would give you.",
+    "Worth taking advantage of while I'm still building this up."
+  ];
+  const honestAngle = V('honest', HONEST_ANGLE_OPTS, 7);
+  approaches.push({
+    key:'honest',
+    title:'Honest New Business',
+    desc:"You're young and just starting — own it. It builds trust instead of hurting you.",
+    afterAnswer: `Hey, is this ${ownerAddr}? ${d.name}. I'll be straight with you.`,
+    opening: (hasSite ? T(
+      `I'm 17. Just started a small web design business here in Bucks County. I'm looking at ${site} right now — noticed something worth mentioning.`,
+      `I'm 17.\nJust started a small web design business in Bucks County.\nI'm looking at ${site} right now.\nNoticed something worth mentioning.`,
+      `I'm 17. Started a web design business in Bucks County. Looking at ${site} right now — noticed something.`
+    ) : T(
+      `I'm 17. Just started a small web design business here in Bucks County. I'm looking for ${biz} online right now — no website comes up.`,
+      `I'm 17.\nJust started a small web design business in Bucks County.\nI'm looking for ${biz} online right now.\nNo website comes up.`,
+      `I'm 17. Started a web design business in Bucks County. Looking for ${biz} online. Nothing comes up.`
+    )) + notesClause(d, 'honest'),
+    middle: hasSite ? T(
+      `${problemLine(probs)} Because I'm new, my pricing's sharper than the big agencies. And I actually need the results. ${honestAngle}`,
+      `${problemLine(probs)}\nBecause I'm new, my pricing's sharper than the big agencies.\nI actually need the results and reviews.\n${honestAngle}`,
+      `${problemLine(probs)} I'm new, so I'm not charging agency prices. I need the results right now. ${honestAngle}`
+    ) : T(
+      `Right now nobody can find you online. They're finding your competitors instead. Because I'm new, my pricing's sharper than the big agencies. And I actually need the results. ${honestAngle}`,
+      `Right now, nobody can find you online.\nThey're finding your competitors instead.\nMy pricing's sharper than the big agencies, because I'm new.\nI need the results and reviews.\n${honestAngle}`,
+      `Right now you're invisible online. Competitors are getting found instead. I'm new, so my pricing's sharper. I need the results right now. ${honestAngle}`
+    ),
+    close: T(
+      `No pressure. I'd love to show you what I found. `,
+      `No pressure at all.\nI'd love to show you what I found. `,
+      `No pressure. I'll show you what I found either way. `
+    ) + goalCTA(d)
+  });
+
+  /* 5. Results-First */
+  approaches.push({
+    key:'results',
+    title:'Results-First',
+    desc:'Lead with the money/leads angle immediately — skip the small talk entirely.',
+    afterAnswer: `Hey ${ownerAddr}, this is ${d.name}. I'll cut right to it.`,
+    opening: hasSite ? T(
+      `I'm looking at ${site} right now. It's probably costing you jobs.`,
+      `I'm looking at ${site} right now.\nIt's probably costing you jobs.`,
+      `Looking at ${site} right now. It's costing you jobs.`
+    ) : T(
+      `I'm looking for ${biz} online right now. Not having a site is costing you jobs.`,
+      `I'm looking for ${biz} online right now.\nNot having a site is costing you jobs.`,
+      `Looking for ${biz} online right now. No site is costing you jobs.`
+    ),
+    middle: hasSite ? T(
+      `${problemLine(probs)} Most people search on their phone, moving fast. Slow or outdated site, they skip you. That's ${loses} going to a competitor.`,
+      `${problemLine(probs)}\nMost people search on their phone, moving fast.\nSlow or outdated site, they skip you.\nThat's ${loses} going to a competitor.`,
+      `${problemLine(probs)} People search fast, on their phone. Bad site, they bounce to the next name. That's ${loses} gone.`
+    ) : T(
+      `Most people search on their phone, moving fast. No site, they can't find you. They call whoever does show up. That's ${loses} going somewhere else.`,
+      `Most people search on their phone, moving fast.\nNo site, they can't find you.\nThey call whoever does show up.\nThat's ${loses} going somewhere else.`,
+      `People search fast, on their phone. No site, you don't exist to them. That's ${loses} going to a competitor.`
+    ),
+    close: `I can fix that. ` + goalCTA(d)
+  });
+
+  /* 6. Quick Value Offer */
+  approaches.push({
+    key:'quickvalue',
+    title:'Quick Value Offer',
+    desc:'Offer something small and free upfront to lower the guard and prove you deliver.',
+    afterAnswer: `Hey, is this ${ownerAddr}? ${d.name}. Not selling anything — just want to give you something.`,
+    opening: `I build sites for ${verb}.`,
+    middle: (hasSite ? T(
+      `I'm looking at ${site} right now. Put together a couple quick notes. ${problemLine(probs)} I'll send it over free. No catch.`,
+      `I'm looking at ${site} right now.\nPut together a couple quick notes.\n${problemLine(probs)}\nFree, no catch.`,
+      `Looking at ${site} right now. Quick list of what's wrong. ${problemLine(probs)} Free, no strings.`
+    ) : T(
+      `Put together a quick idea of what a site could look like for ${biz}. I'll send it over free. No catch.`,
+      `Put together a quick idea of what a site could look like for ${biz}.\nFree, no catch.`,
+      `Put together a quick mockup for ${biz}. Free, no strings.`
+    )),
+    close: goalCTA(d) + ` Won't hear from me again unless you want to.`
+  });
+
+  /* 7. Social Proof */
+  const PROOF_LEAD_OPTS = [
+    'The last couple businesses I worked with',
+    "Every business I've built a site for recently",
+    "The last few people I've worked with"
+  ];
+  const socialproofLead = V('socialproof', PROOF_LEAD_OPTS, 10);
+  approaches.push({
+    key:'socialproof',
+    title:'Social Proof',
+    desc:'Reference other happy clients / results to reduce perceived risk.',
+    afterAnswer: `Hey, is this ${ownerAddr}? ${d.name}. Quick call about some results nearby.`,
+    opening: `I've been helping ${verb} around Bucks County get more calls off their sites. Wanted to reach out to you too.`,
+    middle: (hasSite ? T(
+      `${socialproofLead} had no idea their site was turning people away. I'm looking at ${site} right now — same thing. Usually a quick fix.`,
+      `${socialproofLead} had no idea their site was turning people away.\nNot until I showed them.\nI'm looking at ${site} right now — same thing.`,
+      `${socialproofLead} were shocked how many calls they were missing. Looking at ${site} right now. Same fix. Easy, fast.`
+    ) : T(
+      `${socialproofLead} had no website either. Had no idea how many calls they were missing until I built them one. ${biz}'s in that same spot right now.`,
+      `${socialproofLead} had no website either.\nHad no idea how many calls they were missing.\n${biz}'s in that same spot right now.`,
+      `${socialproofLead} had no website. Same as ${biz} right now. Easy, fast fix once you see it.`
+    )) + notesClause(d, 'socialproof'),
+    close: `Happy to show you what I showed them. Two minutes. ` + goalCTA(d)
+  });
+
+  return approaches;
+}
+
+/* ---------------- In-Person Script Builder ---------------- */
+function buildInPerson(d, approach){
+  const ownerAddr = d.ownerFirst || "there";
+  const hasSite = d.hasSite;
+  const industry = getIndustry(d);
+  const niche = industry.niche;
+  const verb = industry.plural;
+  const defaultProblem = industry.defaultProblem;
+
+  if(approach && approach.key === 'lc'){
+    const probs = d.problems;
+    const lcOfferIp = V('lc', LC_OFFER_OPTS, 4);
+    const problemLineIp = probs ? cap(probs.trim().toLowerCase().replace(/\.$/, '')) + '.' : cap(defaultProblem) + '.';
+    return {
+      opening: T(
+        `Hey — random walk-in, I know. Got 30 seconds?`,
+        `Hey, I'll be upfront — random walk-in. Got 30 seconds?`,
+        `Hey — random walk-in. Give me 30 seconds.`
+      ),
+      middle: (hasSite ? T(
+        `Reason I stopped in — I looked at your site before coming. ${problemLineIp} ${cap(lcOfferIp)}. Free example of it fixed up, zero obligation.`,
+        `Reason I stopped in — I looked at your site before coming.\n${problemLineIp}\n${cap(lcOfferIp)}. Free example, zero obligation.`,
+        `Reason I stopped in — checked your site first. ${problemLineIp} ${cap(lcOfferIp)}. Free example, zero obligation.`
+      ) : T(
+        `Reason I stopped in — I looked for ${d.bizName} online before coming. No website came up. ${cap(lcOfferIp)}. Free example, zero obligation.`,
+        `Reason I stopped in — I looked for ${d.bizName} online.\nNo website came up.\n${cap(lcOfferIp)}. Free example, zero obligation.`,
+        `Reason I stopped in — checked for ${d.bizName} online. Nothing came up. ${cap(lcOfferIp)}. Free example, zero obligation.`
+      )) + notesClause(d, 'lc'),
+      close: lcClose(d, 'inperson'),
+      objections: buildLcObjections(d)
+    };
+  }
+
+  const problemLineIp2 = d.problems ? cap(d.problems.trim().toLowerCase().replace(/\.$/, '')) + '.' : cap(defaultProblem) + '.';
+  return {
+    opening: T(
+      `Hey, sorry to just walk in. I'm ${d.name} — I do websites for ${verb} around here. Got a quick sec?`,
+      `Hey, how's it going? I'm ${d.name}. I do websites for ${verb} around here. Got a quick sec?`,
+      `Hey — ${d.ownerFirst ? "you must be " + d.ownerFirst : "you the owner"}? I'm ${d.name}. Websites, for ${verb} around here. 60 seconds.`
+    ),
+    middle: hasSite ? T(
+      `I looked at your site before stopping in. ${problemLineIp2} I'm 17. Just started this business. Already working with a few shops in the area.`,
+      `I looked at your site before stopping in.\n${problemLineIp2}\nI'm 17, just started this.\nAlready working with a few shops in the area.`,
+      `Checked your site first. ${problemLineIp2} I'm 17. Started this recently. Working with a few shops around here already.`
+    ) : T(
+      `I noticed ${d.bizName} doesn't have a website. That means people searching for a ${niche} nearby find your competitors instead. I'm 17. Just started this business.`,
+      `I noticed ${d.bizName} doesn't have a website.\nPeople searching for a ${niche} nearby find your competitors instead.\nI'm 17, just started this.`,
+      `${d.bizName} doesn't have a website. Every search for a ${niche} nearby goes to a competitor. I'm 17. Started this recently.`
+    ),
+    close: `I can leave you my card, or show you on my phone right now — two minutes. ` + goalCTA(d)
+  };
+}
+
+/* ---------------- Outcome-Based Follow-Up ----------------
+   Single, unified follow-up system: every follow-up (text message + optional
+   callback opening) is driven by the logged call outcome. There is no separate
+   static follow-up panel anymore — this is the only one. */
+/* Returns an array — a call can carry more than one outcome now (Interested +
+   Call Later), and each one that has follow-up content gets its own block,
+   stacked in the Follow-Up Script section. Empty array (not null) when there's
+   nothing logged yet, so call sites can just check .length. */
+function buildOutcomeFollowUp(d){
+  const ownerAddr = d.ownerFirst || "there";
+  const outcomes = d.outcomes || [];
+  if(!outcomes.length) return [];
+
+  const byOutcome = {
+    no_answer: {
+      label: 'No Answer',
+      textMessage: T(
+        `Hey ${ownerAddr}, ${d.name} with Forge Digital. Tried calling earlier. What's a good time to catch you?`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Tried you earlier. Morning or afternoon better?`,
+        `${ownerAddr}, ${d.name}, Forge Digital. Tried calling. I'll try again today — text me a better time.`
+      ),
+      callBackOpening: T(
+        `Hey ${ownerAddr}, ${d.name} again. Tried you a bit ago. Got a couple minutes now?`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Got 30 seconds this time?`,
+        `${ownerAddr}, ${d.name} again. Round two. Got 20 seconds?`
+      )
+    },
+    hung_up: {
+      label: 'Hung Up',
+      textMessage: T(
+        `Hey ${ownerAddr}, ${d.name} here. Bad timing earlier, my bad. Morning or afternoon better?`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. My bad on the timing. What's a better window?`,
+        `${ownerAddr}, ${d.name} here. Bad timing, all good. Give me a window, two minutes, that's it.`
+      ),
+      callBackOpening: T(
+        `Hey ${ownerAddr}, ${d.name} again. Sorry about earlier. Got 20 seconds now?`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Catching you again. 20 seconds?`,
+        `${ownerAddr}, ${d.name} again. Better timing this time?`
+      )
+    },
+    interested: {
+      label: 'Interested',
+      textMessage: T(
+        `Hey ${ownerAddr}, ${d.name} here. Great talking to you. I'll get that together${d.callbackTime ? `, follow up ${d.callbackTime}` : ' and send it over shortly'}.`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Appreciate the conversation. I'm on it${d.callbackTime ? `, talk ${d.callbackTime}` : ', will follow up shortly'}.`,
+        `${ownerAddr}, ${d.name} here. Good call. On it now${d.callbackTime ? `, talk ${d.callbackTime}` : ''}.`
+      ),
+      callBackOpening: T(
+        `Hey ${ownerAddr}, ${d.name} again. Following up like we planned. Got what we talked about ready.`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Following up like we said. Got a couple minutes?`,
+        `${ownerAddr}, ${d.name}. Following up. Got it ready.`
+      )
+    },
+    send_portfolio: {
+      label: 'Send Portfolio',
+      textMessage: T(
+        `Hey ${ownerAddr}, ${d.name} here. Quick look at some recent work. I'll check back ${d.callbackTime || 'in a couple days'} to hear what you think.`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Sending over a few examples. I'll follow up ${d.callbackTime || 'in a couple days'}.`,
+        `${ownerAddr}, ${d.name} here. Examples attached. I'll call ${d.callbackTime || 'in a couple days'} for a real answer.`
+      ),
+      callBackOpening: T(
+        `Hey ${ownerAddr}, ${d.name}. Get a chance to look at those examples?`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Following up on the examples. Thoughts?`,
+        `${ownerAddr}, ${d.name}. Quick check — did those examples land?`
+      )
+    },
+    call_later: {
+      label: 'Call Later',
+      textMessage: T(
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital.${d.callbackTime ? ` Still good for ${d.callbackTime}?` : " Let me know a good time and I'll call."}`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Checking in like planned.${d.callbackTime ? ` Still good for ${d.callbackTime}?` : ' What time works?'}`,
+        `${ownerAddr}, ${d.name}.${d.callbackTime ? ` ${d.callbackTime} still work?` : " When's good?"}`
+      ),
+      callBackOpening: T(
+        `Hey ${ownerAddr}, ${d.name}. Said I'd catch you now. Got a couple minutes?`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Right on time. Got a couple minutes?`,
+        `${ownerAddr}, ${d.name}. Right on schedule. Got 20 seconds?`
+      )
+    },
+    not_interested: {
+      label: 'Not Interested',
+      textMessage: T(
+        `Hey ${ownerAddr}, ${d.name} here. Respect that. Appreciate the time. Number's there if that changes.`,
+        `Hey ${ownerAddr}, ${d.name} from Forge Digital. Understood, appreciate the honesty. Door's open if that changes.`,
+        `${ownerAddr}, ${d.name}. All good. You know where to find me.`
+      ),
+      callBackOpening: null
+    }
+  };
+
+  return outcomes.map(o => byOutcome[o] ? { ...byOutcome[o], outcome: o } : null).filter(Boolean);
+}
+
+/* ---------------- Closing Lines (by outcome) ---------------- */
+function buildClosingLines(d){
+  const owner = d.ownerFirst ? `, ${d.ownerFirst}` : '';
+  const cbTime = d.callbackTime || T('a better time', 'a better time', 'then');
+
+  return {
+    interested: T(
+      [
+        `Awesome, I'll get that sent over today — talk soon${owner}.`,
+        `Perfect, I'll follow up ${d.callbackTime ? d.callbackTime : 'tomorrow'} with everything we talked about.`,
+        `Sounds good — appreciate you taking the time${owner}.`
+      ],
+      [
+        `Great — I'll get that over to you today.\nTalk soon${owner}.`,
+        `Perfect — I'll follow up ${d.callbackTime ? d.callbackTime : 'tomorrow'}.\nWith everything we covered.`,
+        `Appreciate it${owner}.\nI'll get moving on this and keep you posted.`
+      ],
+      [
+        `Let's get it locked in — I'll send that over right now.`,
+        `Say less${owner} — I'll get moving on this today.`,
+        `Appreciate it${owner} — talk soon.`
+      ]
+    ),
+    notInterested: T(
+      [
+        `All good, no worries at all — appreciate you hearing me out.`,
+        `Totally understand, thanks for taking my call${owner}.`,
+        `No stress — if that ever changes, you've got my number.`
+      ],
+      [
+        `All good — appreciate you taking the time to hear me out.`,
+        `Understood.\nThanks for the honesty${owner} — I'll leave it there.`,
+        `No problem.\nIf that changes down the road, you've got my number.`
+      ],
+      [
+        `All good — appreciate the honesty, have a good one.`,
+        `No hard feelings, I'll leave you to it.`,
+        `Fair enough — you know where to find me if that changes.`
+      ]
+    ),
+    callLater: T(
+      [
+        `Sounds good, I'll catch you ${cbTime} then.`,
+        `No problem — I'll try you back ${cbTime}, talk soon.`,
+        `All good, I'll follow up ${cbTime} — appreciate it${owner}.`
+      ],
+      [
+        `Sounds good, I'll catch you ${cbTime}.`,
+        `No problem — I'll call back ${cbTime}, talk soon.`,
+        `Got it, I'll follow up ${cbTime}${owner}.`
+      ],
+      [
+        `Got it, I'll catch you ${cbTime} — talk soon.`,
+        `No problem, I'll circle back ${cbTime}.`,
+        `Cool, locking that in — I'll call you back ${cbTime}.`
+      ]
+    )
+  };
+}
+
+/* ---------------- Best Contact Times ---------------- */
+function contactTimes(bizType){
+  const earlyMorning = ['Contractor','Roofing','Landscaping','Sealcoating / Asphalt'];
+  const midDay = ['Auto Repair'];
+
+  if(earlyMorning.includes(bizType)){
+    return {
+      note: 'Early risers, out on job sites by mid-morning — catch them before they load the truck.',
+      phone: '7:00 – 9:00 AM, or after 4:30 PM',
+      dm: '6:30 – 8:00 AM, or evenings after 7:00 PM',
+      email: 'Early morning, 6:00 – 8:00 AM — often checked before heading out',
+      walkin: '7:30 – 9:30 AM, before they head to job sites'
+    };
+  }
+  if(midDay.includes(bizType)){
+    return {
+      note: 'Slower right when they open and right before close — aim for the gap between cars.',
+      phone: '9:30 – 11:30 AM, or 1:30 – 3:30 PM',
+      dm: 'Late morning or lunch, 11:00 AM – 1:00 PM',
+      email: 'Late morning, around 10:00 – 11:00 AM',
+      walkin: '10:00 AM – 12:00 PM, during a lull between cars'
+    };
+  }
+  return {
+    note: 'Standard business hours work well — avoid the early-morning rush and end-of-day wind-down.',
+    phone: '9:00 – 11:00 AM, or 2:00 – 4:00 PM',
+    dm: 'Late morning, or early evening around 7:00 – 8:00 PM',
+    email: 'Mid-morning, around 10:00 AM',
+    walkin: '10:00 AM – 2:00 PM on a weekday'
+  };
+}
+
+/* ---------------- After-Call Steps ---------------- */
+function afterCallSteps(){
+  return {
+    won: ["Text them within 5 minutes while it's fresh", "Write down exactly what they said (verbatim if you can)", "Set a calendar reminder for the agreed follow-up time", "Screenshot or save the site issues you mentioned"],
+    lost: ["Log it anyway — name, date, and their reason", "Don't burn the bridge — leave the door open for a future call", "Move to the next name on your list within 60 seconds", "Review: was it the pitch, the timing, or just a no?"]
+  };
+}
+
+/* ---------------- Render ---------------- */
+const outputArea = document.getElementById('outputArea');
+
+/* Shared by the single-business form AND bulk import — one row of raw field
+   values in, one fully-formed script-generator data object out. Keeping this
+   as the single source of truth means bulk-generated businesses get exactly
+   the same treatment (industry profile, hasSite detection, etc.) as one typed
+   in by hand. */
+function buildBusinessData(fields){
+  const bizName = (fields.bizName || '').trim();
+  if(!bizName) return null;
+  const websiteRaw = fields.websiteUrl || '';
+  const hasSite = detectHasWebsite(websiteRaw);
+  return {
+    bizName,
+    ownerFull: (fields.ownerFull || '').trim(),
+    ownerFirst: firstName((fields.ownerFull || '').trim()),
+    phone: (fields.phone || '').trim(),
+    city: (fields.city || '').trim(),
+    bizType: fields.bizType || 'Other',
+    customType: fields.customType || '',
+    site: hasSite ? cleanUrl(websiteRaw) : '',
+    hasSite,
+    rawWebsiteInput: websiteRaw,
+    problems: (fields.problems || '').trim(),
+    notes: (fields.notes || '').trim(),
+    goal: fields.goal || 'conversation',
+    callbackTime: (fields.callbackTime || '').trim(),
+    outcomes: [],
+    name: '[Your Name]',
+    // Only carried while the form still matches what was imported — if the
+    // user moves on to a different business, this naturally stops attaching.
+    leadFinderId: (incomingLeadFinderId && bizName.toLowerCase() === incomingLeadFinderBizName) ? incomingLeadFinderId : null
+  };
+}
+
+function gatherData(){
+  const bizName = pick('bizName','');
+  if(!bizName){
+    document.getElementById('bizName').focus();
+    document.getElementById('bizName').style.borderColor = 'var(--red)';
+    setTimeout(()=>{ document.getElementById('bizName').style.borderColor=''; }, 1500);
+    return null;
+  }
+  return buildBusinessData({
+    bizName,
+    ownerFull: pick('ownerName',''),
+    phone: pick('phoneNumber',''),
+    city: pick('city',''),
+    bizType: pick('bizType','Other') || document.getElementById('bizType').value,
+    customType: pick('customType',''),
+    websiteUrl: pick('websiteUrl',''),
+    problems: pick('problems',''),
+    notes: pick('notes',''),
+    goal: document.getElementById('callGoal').value,
+    callbackTime: pick('callbackTime','')
+  });
+}
+
+document.getElementById('generateBtn').addEventListener('click', ()=>{
+  if(inputMode === 'bulk') runBulkGenerate();
+  else runSingleGenerate();
+});
+
+function runSingleGenerate(){
+  const d = gatherData();
+  if(!d) return;
+
+  /* keep the latest logged outcomes if this business already has call history */
+  const existingKey = (d.bizName || '').trim().toLowerCase();
+  const existing = historyList.find(h => h.key === existingKey);
+  if(existing) d.outcomes = latestOutcomes(migrateEntry(existing));
+
+  lastData = d;
+  activeApproachIdx = 0;
+  activeClosingOutcome = 'interested';
+  showFollowUp = false;
+  regenSeeds = {};
+  pendingOutcomes = [];
+  pendingNotes = '';
+
+  const btn = document.getElementById('generateBtn');
+  btn.disabled = true;
+  const originalHTML = btn.innerHTML;
+  btn.innerHTML = 'Generating…';
+
+  outputArea.innerHTML = `<div class="loading-wrap"><div class="spinner"></div><p>Building your scripts for ${d.bizName}…</p></div>`;
+  outputArea.scrollIntoView({behavior:'smooth', block:'start'});
+
+  setTimeout(()=>{
+    btn.disabled = false;
+    btn.innerHTML = originalHTML;
+    upsertHistory(d);
+    render();
+  }, 650);
+}
+
+/* ---------------- Bulk Generate ---------------- */
+async function runBulkGenerate(){
+  const { rows } = parseBulkText(bulkPasteEl.value);
+  if(!rows.length){
+    showToast('Paste some rows first');
+    return;
+  }
+
+  const btn = document.getElementById('generateBtn');
+  const progressWrap = document.getElementById('bulkProgress');
+  const progressFill = document.getElementById('bulkProgressFill');
+  const progressText = document.getElementById('bulkProgressText');
+
+  btn.disabled = true;
+  progressWrap.style.display = 'block';
+  progressFill.style.width = '0%';
+  progressText.textContent = `Generating 0 of ${rows.length}…`;
+
+  outputArea.innerHTML = `<div class="loading-wrap"><div class="spinner"></div><p>Building scripts for ${rows.length} businesses…</p></div>`;
+  outputArea.scrollIntoView({behavior:'smooth', block:'start'});
+
+  const batch = [];
+  for(let i = 0; i < rows.length; i++){
+    const d = bulkRowToData(rows[i]);
+    if(d){
+      const key = d.bizName.trim().toLowerCase();
+      const existing = historyList.find(h => h.key === key);
+      if(existing) d.outcomes = latestOutcomes(migrateEntry(existing));
+      upsertHistory(d);
+      batch.push(d);
+    }
+    progressFill.style.width = Math.round(((i+1)/rows.length)*100) + '%';
+    progressText.textContent = `Generating ${i+1} of ${rows.length}…`;
+    /* yield to the UI thread periodically so the progress bar actually paints
+       and the tab doesn't lock up on large lists */
+    if(i % 3 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+
+  btn.disabled = false;
+  progressWrap.style.display = 'none';
+
+  currentBatch = batch;
+  activeBatchKey = batch.length ? batch[0].bizName.trim().toLowerCase() : null;
+
+  if(!batch.length){
+    showToast('No valid rows found');
+    outputArea.innerHTML = `<div class="output-empty"><div class="icon">📜</div><h3>No script yet</h3><p>Fill in the business details on the left and hit Generate — your personalized call sheet will show up here.</p></div>`;
+    return;
+  }
+
+  lastData = batch[0];
+  activeApproachIdx = 0;
+  activeClosingOutcome = 'interested';
+  showFollowUp = false;
+  regenSeeds = {};
+  pendingOutcomes = [];
+  pendingNotes = '';
+  render();
+  showToast(`Generated ${batch.length} businesses`);
+}
+
+function csvEscape(val){
+  const s = String(val == null ? '' : val);
+  if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+  return s;
+}
+
+function downloadBlob(content, filename, type){
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadBatchTxt(){
+  if(!currentBatch.length) return;
+  let out = `FORGE DIGITAL — BULK CALL SHEET\n${currentBatch.length} businesses\n\n${'='.repeat(60)}\n\n`;
+  out += `CONTENTS\n${'-'.repeat(30)}\n`;
+  currentBatch.forEach((d,i) => out += `${i+1}. ${d.bizName}\n`);
+  out += `\n${'='.repeat(60)}\n\n`;
+  currentBatch.forEach((d,i) => {
+    out += exportTextFor(d);
+    if(i < currentBatch.length - 1) out += `\n${'#'.repeat(60)}\n\n`;
+  });
+  downloadBlob(out, `bulk_call_scripts_${currentBatch.length}.txt`, 'text/plain');
+  showToast('Bulk .txt downloaded');
+}
+
+function downloadBatchCsv(){
+  if(!currentBatch.length) return;
+  const header = ['Business Name','Type','Owner','Phone','Website','Approach','Opening','Middle','Close'];
+  const lines = [header.map(csvEscape).join(',')];
+  currentBatch.forEach(d => {
+    const approaches = buildApproaches(d);
+    const typeLabel = d.bizType === 'Other' && d.customType ? d.customType : d.bizType;
+    approaches.forEach(a => {
+      lines.push([
+        d.bizName, typeLabel, d.ownerFull, d.phone, d.hasSite ? d.site : 'no website',
+        a.title, a.opening, a.middle, a.close
+      ].map(csvEscape).join(','));
+    });
+  });
+  downloadBlob(lines.join('\n'), `bulk_call_scripts_${currentBatch.length}.csv`, 'text/csv');
+  showToast('Bulk .csv downloaded');
+}
+
+function render(){
+  if(!lastData) return;
+  const d = lastData;
+  const approaches = buildApproaches(d);
+  const closingLines = buildClosingLines(d);
+  const times = contactTimes(d.bizType);
+  const after = afterCallSteps();
+  renderObjections(d);
+
+  let html = '';
+
+  if(currentBatch.length){
+    activeBatchKey = (d.bizName || '').trim().toLowerCase();
+    html += `
+    <div class="batch-strip">
+      <div class="batch-strip-top">
+        <div class="batch-strip-title">📋 Batch — ${currentBatch.length} businesses generated</div>
+        <div class="batch-strip-actions">
+          <button class="btn-ghost" id="batchDownloadTxt">⬇ Download All (.txt)</button>
+          <button class="btn-ghost" id="batchDownloadCsv">⬇ Download All (.csv)</button>
+          <button class="btn-ghost" id="batchClear">✕ Clear Batch</button>
+        </div>
+      </div>
+      <div class="batch-chip-row">
+        ${currentBatch.map(bd => {
+          const key = bd.bizName.trim().toLowerCase();
+          const entry = historyList.find(h => h.key === key);
+          const latest = entry ? latestOutcomes(entry) : [];
+          return `<button class="batch-chip ${key===activeBatchKey?'active':''}" data-batch-key="${key}">${bd.bizName}${latest.map(o=>`<span class="bc-outcome outcome-badge ob-${o}">${OUTCOME_LABELS[o]}</span>`).join('')}</button>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  html += `
+  <div class="output-header">
+    <div>
+      <h2>Scripts for ${d.bizName}</h2>
+      <div class="biz-tag">${d.bizType === 'Other' && d.customType ? d.customType : d.bizType} ${d.ownerFull ? '· Contact: '+d.ownerFull : ''} ${currentMode==='phone' ? '· Phone Mode' : '· In-Person Mode'} <span class="badge">${TONE_LABELS[currentTone]}</span> <span class="badge" style="background:rgba(47,143,255,0.14);color:var(--blue-bright);border-color:rgba(47,143,255,0.35);">${GOAL_LABELS[d.goal]}</span> ${!d.hasSite ? '<span class="badge" style="background:rgba(255,184,77,0.14);color:var(--amber);border-color:rgba(255,184,77,0.35);">No Website</span>' : ''}</div>
+    </div>
+    <div class="output-actions">
+      ${hasValidPhone(d.phone) ? `<button type="button" class="call-btn" id="callViaVoiceBtn" title="Copy number and open Google Voice">📞 Call ${d.phone}</button>` : ''}
+      <button type="button" class="maps-btn" id="openMapsBtn" title="Open in Google Maps">📍 Maps</button>
+      <button class="btn-ghost" id="exportBtn">⬇ Export All (.txt)</button>
+    </div>
+  </div>`;
+
+  /* Call outcome + follow-up */
+  const currentHistoryEntry = historyList.find(h => h.key === (d.bizName||'').trim().toLowerCase());
+  const pastCalls = currentHistoryEntry ? (currentHistoryEntry.outcomeLog || []) : [];
+  const lastCall = pastCalls.length ? pastCalls[pastCalls.length - 1] : null;
+  html += `
+  <div class="section-block" style="margin-top:22px;">
+    <div class="panel-title"><span class="dot"></span>Log This Call</div>
+    <div class="outcome-row" id="outcomeRow">
+      ${Object.keys(OUTCOME_LABELS).map(k=>`<button class="outcome-btn ${pendingOutcomes.includes(k)?'active':''}" data-outcome="${k}">${OUTCOME_LABELS[k]}</button>`).join('')}
+    </div>
+    <div class="field" style="margin:10px 0 0;">
+      <textarea id="callNotesInput" rows="2" placeholder="Quick note for this call — optional, e.g. wants pricing by Friday">${pendingNotes}</textarea>
+    </div>
+    <button class="btn-ghost" id="logCallBtn" style="margin-top:10px;" ${pendingOutcomes.length ? '' : 'disabled'}>${pendingOutcomes.length ? `✓ Log This Call — ${pendingOutcomes.map(o=>OUTCOME_LABELS[o]).join(' + ')}` : 'Select an outcome to log'}</button>
+    ${lastCall ? `<div class="call-log-hint">${pastCalls.length} call${pastCalls.length>1?'s':''} logged for ${d.bizName} — latest: ${(lastCall.outcomes||[]).map(o=>OUTCOME_LABELS[o]).join(' + ') || '(none)'} (${timeAgo(lastCall.at)})</div>` : ''}
+    <button class="btn-ghost" id="followUpBtn" style="margin-top:10px;">📞 Generate Follow-Up</button>
+  </div>`;
+
+  const outcomeFollowUps = buildOutcomeFollowUp(d);
+  if(showFollowUp && outcomeFollowUps.length){
+    html += `
+    <div class="section-block" id="followUpSection">
+      <div class="panel-title"><span class="dot"></span>Follow-Up Script${outcomeFollowUps.length > 1 ? 's' : ''}</div>
+      ${outcomeFollowUps.map(fu => `
+      <div class="script-card">
+        <div class="approach-desc" style="margin-bottom:12px;"><span class="badge">${fu.label}</span></div>
+        <div class="segment">
+          <div class="seg-label">Text Message</div>
+          <p>${fu.textMessage}</p>
+          <button class="copy-mini copy-line" data-followup-part="text" data-followup-outcome="${fu.outcome}">Copy</button>
+        </div>
+        ${fu.callBackOpening ? `
+        <div class="segment">
+          <div class="seg-label">If You Call Back <span class="seg-time">opening line</span></div>
+          <p>${fu.callBackOpening}</p>
+          <button class="copy-mini copy-line" data-followup-part="call" data-followup-outcome="${fu.outcome}">Copy</button>
+        </div>` : ''}
+      </div>`).join('')}
+    </div>`;
+  }
+
+  if(currentMode === 'phone'){
+    html += `<div class="tabs" id="approachTabs">`;
+    approaches.forEach((a,i)=>{
+      html += `<button class="tab ${i===activeApproachIdx?'active':''}" data-idx="${i}">${a.title}</button>`;
+    });
+    html += `</div>`;
+
+    const a = approaches[activeApproachIdx];
+    html += `
+    <div class="script-card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+        <div>
+          <h3>${approachHeading(a.title)}</h3>
+          <div class="approach-desc">${a.desc}</div>
+        </div>
+        <button class="btn-ghost" id="regenBtn" data-key="${a.key}" style="flex-shrink:0;">🔄 Regenerate</button>
+      </div>
+
+      <div class="segment">
+        <div class="seg-label">After They Answer <span class="seg-time">first words out of your mouth</span></div>
+        <p>${a.afterAnswer}</p>
+        <button class="copy-mini copy-line" data-copy="afteranswer">Copy</button>
+      </div>
+
+      <div class="segment">
+        <div class="seg-label">Opening <span class="seg-time">first ~10 seconds</span></div>
+        <p>${a.opening}</p>
+        <button class="copy-mini copy-line" data-copy="opening">Copy</button>
+      </div>
+
+      <div class="segment">
+        <div class="seg-label">Middle <span class="seg-time">30–60 seconds</span></div>
+        <p>${a.middle}</p>
+        <button class="copy-mini copy-line" data-copy="middle">Copy</button>
+      </div>
+
+      <div class="segment">
+        <div class="seg-label">Close <span class="seg-time">last ~30 seconds</span></div>
+        <p>${a.close}</p>
+        <button class="copy-mini copy-line" data-copy="close">Copy</button>
+      </div>
+
+      ${a.objections ? `
+      <div class="panel-title" style="margin-top:18px;margin-bottom:10px;"><span class="dot"></span>Built-In Objection Handling</div>
+      ${a.objections.map((o,oi)=>`
+        <div class="objection">
+          <div class="q">${o.q}
+            <button class="copy-mini" data-lcobj="${oi}">Copy</button>
+          </div>
+          <div class="a">${o.a}</div>
+        </div>
+      `).join('')}` : ''}
+
+      <button class="btn-ghost" style="margin-top:10px;" data-copy="full">📋 Copy Full Script</button>
+    </div>`;
+  } else {
+    approaches.forEach((a,i)=>{
+      const ip = buildInPerson(d, a);
+      html += `
+      <div class="script-card">
+        <h3>${a.title} — In-Person</h3>
+        <div class="approach-desc">${a.desc}</div>
+
+        <div class="segment">
+          <div class="seg-label">Opening <span class="seg-time">walking up / first line</span></div>
+          <p>${ip.opening}</p>
+          <button class="copy-mini copy-line" data-inperson="${i}" data-part="opening">Copy</button>
+        </div>
+
+        <div class="segment">
+          <div class="seg-label">Middle <span class="seg-time">quick pitch</span></div>
+          <p>${ip.middle}</p>
+          <button class="copy-mini copy-line" data-inperson="${i}" data-part="middle">Copy</button>
+        </div>
+
+        <div class="segment">
+          <div class="seg-label">Close</div>
+          <p>${ip.close}</p>
+          <button class="copy-mini copy-line" data-inperson="${i}" data-part="close">Copy</button>
+        </div>
+
+        ${ip.objections ? `
+        <div class="panel-title" style="margin-top:18px;margin-bottom:10px;"><span class="dot"></span>Built-In Objection Handling</div>
+        ${ip.objections.map((o,oi)=>`
+          <div class="objection">
+            <div class="q">${o.q}
+              <button class="copy-mini" data-ip-obj="${i}:${oi}">Copy</button>
+            </div>
+            <div class="a">${o.a}</div>
+          </div>
+        `).join('')}` : ''}
+
+        <button class="btn-ghost" style="margin-top:10px;" data-inperson-full="${i}">📋 Copy Full Script</button>
+      </div>`;
+    });
+  }
+
+  /* Closing lines */
+  const outcomeLabels = {interested:'😊 Interested', notInterested:'🚫 Not Interested', callLater:'⏰ Call Later'};
+  html += `
+  <div class="section-block">
+    <div class="panel-title"><span class="dot"></span>Closing Lines</div>
+    <div class="tabs" id="closingTabs">
+      ${Object.keys(outcomeLabels).map(k=>`<button class="tab ${k===activeClosingOutcome?'active':''}" data-outcome="${k}">${outcomeLabels[k]}</button>`).join('')}
+    </div>
+    <div class="script-card">
+      ${closingLines[activeClosingOutcome].map((line,i)=>`
+        <div class="segment">
+          <p>${line}</p>
+          <button class="copy-mini copy-line" data-closing="${i}">Copy</button>
+        </div>
+      `).join('')}
+    </div>
+  </div>`;
+
+  /* Best contact times */
+  html += `
+  <div class="section-block">
+    <div class="panel-title"><span class="dot"></span>Best Contact Times <span class="badge" style="margin-left:4px;">${d.bizType}</span></div>
+    <div class="script-card">
+      <div class="approach-desc" style="margin-bottom:16px;">${times.note}</div>
+      <div class="aftercall-grid">
+        <div class="aftercall-card">
+          <h4>📞 Phone Call</h4>
+          <div style="color:var(--text);font-size:13.5px;">${times.phone}</div>
+        </div>
+        <div class="aftercall-card">
+          <h4>💬 Instagram / Facebook DM</h4>
+          <div style="color:var(--text);font-size:13.5px;">${times.dm}</div>
+        </div>
+        <div class="aftercall-card">
+          <h4>✉️ Email</h4>
+          <div style="color:var(--text);font-size:13.5px;">${times.email}</div>
+        </div>
+        <div class="aftercall-card">
+          <h4>🚪 Walk-in / In-Person</h4>
+          <div style="color:var(--text);font-size:13.5px;">${times.walkin}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  /* After call */
+  html += `
+  <div class="section-block">
+    <div class="panel-title"><span class="dot"></span>Right After The Call</div>
+    <div class="aftercall-grid">
+      <div class="aftercall-card">
+        <h4>✅ If it went well</h4>
+        <ul>${after.won.map(x=>`<li>${x}</li>`).join('')}</ul>
+      </div>
+      <div class="aftercall-card">
+        <h4>❌ If it didn't</h4>
+        <ul>${after.lost.map(x=>`<li>${x}</li>`).join('')}</ul>
+      </div>
+    </div>
+  </div>`;
+
+  outputArea.innerHTML = html;
+  wireOutputEvents(approaches, d);
+}
+
+function wireOutputEvents(approaches, d){
+  /* tabs */
+  const tabs = document.getElementById('approachTabs');
+  if(tabs){
+    tabs.addEventListener('click', (e)=>{
+      const t = e.target.closest('.tab');
+      if(!t) return;
+      activeApproachIdx = +t.dataset.idx;
+      render();
+    });
+  }
+
+  /* bulk batch navigator */
+  const batchChipRow = document.querySelector('.batch-chip-row');
+  if(batchChipRow){
+    batchChipRow.addEventListener('click', (e)=>{
+      const chip = e.target.closest('.batch-chip');
+      if(!chip) return;
+      const bd = currentBatch.find(b => b.bizName.trim().toLowerCase() === chip.dataset.batchKey);
+      if(!bd) return;
+      lastData = bd;
+      activeApproachIdx = 0;
+      activeClosingOutcome = 'interested';
+      showFollowUp = false;
+      regenSeeds = {};
+      pendingOutcomes = [];
+      pendingNotes = '';
+      render();
+    });
+  }
+  const batchDownloadTxt = document.getElementById('batchDownloadTxt');
+  if(batchDownloadTxt) batchDownloadTxt.addEventListener('click', downloadBatchTxt);
+  const batchDownloadCsv = document.getElementById('batchDownloadCsv');
+  if(batchDownloadCsv) batchDownloadCsv.addEventListener('click', downloadBatchCsv);
+  const batchClear = document.getElementById('batchClear');
+  if(batchClear){
+    batchClear.addEventListener('click', ()=>{
+      currentBatch = [];
+      activeBatchKey = null;
+      render();
+    });
+  }
+
+  /* regenerate — cycles this approach's phrasing variants without touching the others */
+  const regenBtn = document.getElementById('regenBtn');
+  if(regenBtn){
+    regenBtn.addEventListener('click', ()=>{
+      const key = regenBtn.dataset.key;
+      regenSeeds[key] = (regenSeeds[key] || 0) + 1;
+      render();
+      showToast('Fresh version generated');
+    });
+  }
+
+  /* call outcome — toggles this outcome in/out of the pending selection for the
+     call about to be logged; nothing is saved until "Log This Call" is clicked,
+     so Call Later + Send Portfolio can be picked together as one entry */
+  const outcomeRow = document.getElementById('outcomeRow');
+  if(outcomeRow){
+    outcomeRow.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.outcome-btn');
+      if(!btn) return;
+      const val = btn.dataset.outcome;
+      const idx = pendingOutcomes.indexOf(val);
+      if(idx === -1) pendingOutcomes.push(val); else pendingOutcomes.splice(idx, 1);
+      render();
+    });
+  }
+
+  /* keep pendingNotes in sync as they type, without re-rendering on every
+     keystroke (a full render() would rebuild the textarea and drop focus) */
+  const callNotesInput = document.getElementById('callNotesInput');
+  if(callNotesInput){
+    callNotesInput.addEventListener('input', ()=>{ pendingNotes = callNotesInput.value; });
+  }
+
+  /* commit the pending selection as one new call-log entry, then clear it so
+     the panel is ready for the next call to this business */
+  const logCallBtn = document.getElementById('logCallBtn');
+  if(logCallBtn){
+    logCallBtn.addEventListener('click', ()=>{
+      if(!pendingOutcomes.length || !d.bizName) return;
+      const key = d.bizName.trim().toLowerCase();
+      const outcomes = pendingOutcomes.slice();
+      logCall(key, outcomes, pendingNotes);
+      // Push the resulting status straight onto the lead document in Firestore.
+      // The Client Hub picks it up through its own live subscription, so this
+      // works whether or not the Hub is open — no window.opener needed.
+      if(d.leadFinderId){
+        pushStatusToClientHub(d.leadFinderId, outcomes);
+      }
+      pendingOutcomes = [];
+      pendingNotes = '';
+      showToast('Call logged');
+      render();
+    });
+  }
+
+  /* generate follow-up */
+  const followUpBtn = document.getElementById('followUpBtn');
+  if(followUpBtn){
+    followUpBtn.addEventListener('click', ()=>{
+      if(!d.outcomes || !d.outcomes.length){
+        showToast('Log a call outcome first');
+        return;
+      }
+      showFollowUp = true;
+      render();
+      const section = document.getElementById('followUpSection');
+      if(section) section.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  }
+  outputArea.querySelectorAll('[data-followup-part]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const followUps = buildOutcomeFollowUp(d);
+      const fu = followUps.find(f => f.outcome === btn.dataset.followupOutcome);
+      if(!fu) return;
+      const text = btn.dataset.followupPart === 'text' ? fu.textMessage : fu.callBackOpening;
+      copyText(text, btn);
+    });
+  });
+
+  /* closing line outcome tabs */
+  const closingTabs = document.getElementById('closingTabs');
+  if(closingTabs){
+    closingTabs.addEventListener('click', (e)=>{
+      const t = e.target.closest('.tab');
+      if(!t) return;
+      activeClosingOutcome = t.dataset.outcome;
+      render();
+    });
+  }
+  outputArea.querySelectorAll('[data-closing]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = +btn.dataset.closing;
+      const closingLines = buildClosingLines(d);
+      copyText(closingLines[activeClosingOutcome][idx], btn);
+    });
+  });
+
+  /* LC embedded objection copy — phone mode (active approach card) */
+  outputArea.querySelectorAll('[data-lcobj]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = +btn.dataset.lcobj;
+      const a = approaches[activeApproachIdx];
+      if(!a.objections) return;
+      copyText(a.objections[idx].a, btn);
+    });
+  });
+
+  /* LC embedded objection copy — in-person mode (one card per approach) */
+  outputArea.querySelectorAll('[data-ip-obj]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const [approachIdx, objIdx] = btn.dataset.ipObj.split(':').map(Number);
+      const ip = buildInPerson(d, approaches[approachIdx]);
+      if(!ip.objections) return;
+      copyText(ip.objections[objIdx].a, btn);
+    });
+  });
+
+  /* segment copy (phone mode) */
+  outputArea.querySelectorAll('[data-copy]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const a = approaches[activeApproachIdx];
+      const key = btn.dataset.copy;
+      let text;
+      if(key === 'full'){
+        text = `${approachHeading(a.title).toUpperCase()} — ${d.bizName}\n\nAFTER THEY ANSWER:\n${a.afterAnswer}\n\nOPENING:\n${a.opening}\n\nMIDDLE:\n${a.middle}\n\nCLOSE:\n${a.close}`;
+        if(a.objections){
+          text += `\n\nOBJECTION HANDLING:\n` + a.objections.map(o=>`${o.q}\n${o.a}`).join('\n\n');
+        }
+      } else {
+        text = a[key];
+      }
+      copyText(text, btn);
+    });
+  });
+
+  /* in-person copy */
+  outputArea.querySelectorAll('[data-inperson]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = +btn.dataset.inperson;
+      const part = btn.dataset.part;
+      const ip = buildInPerson(d, approaches[idx]);
+      copyText(ip[part], btn);
+    });
+  });
+  outputArea.querySelectorAll('[data-inperson-full]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = +btn.dataset.inpersonFull;
+      const ip = buildInPerson(d, approaches[idx]);
+      let text = `${approaches[idx].title.toUpperCase()} — IN-PERSON — ${d.bizName}\n\nOPENING:\n${ip.opening}\n\nMIDDLE:\n${ip.middle}\n\nCLOSE:\n${ip.close}`;
+      if(ip.objections){
+        text += `\n\nOBJECTION HANDLING:\n` + ip.objections.map(o=>`${o.q}\n${o.a}`).join('\n\n');
+      }
+      copyText(text, btn);
+    });
+  });
+
+  /* export */
+  const exportBtn = document.getElementById('exportBtn');
+  if(exportBtn){
+    exportBtn.addEventListener('click', ()=>exportAll(d));
+  }
+
+  /* call */
+  const callBtn = document.getElementById('callViaVoiceBtn');
+  if(callBtn){
+    callBtn.addEventListener('click', ()=>gvCall(d.phone));
+  }
+
+  /* maps */
+  const mapsBtn = document.getElementById('openMapsBtn');
+  if(mapsBtn){
+    mapsBtn.addEventListener('click', ()=>openInGoogleMaps(d.bizName, d.city));
+  }
+}
+
+/* Builds the full plain-text call sheet for one business. Shared by the
+   single "Export All" button and the bulk "Download All (.txt)" button. */
+function exportTextFor(d){
+  const approaches = buildApproaches(d);
+  let out = `FORGE DIGITAL — CALL SHEET\n`;
+  out += `Business: ${d.bizName}\n`;
+  if(d.ownerFull) out += `Contact: ${d.ownerFull}\n`;
+  if(d.phone) out += `Phone: ${d.phone}\n`;
+  if(d.city) out += `City: ${d.city}\n`;
+  out += `Type: ${d.bizType === 'Other' && d.customType ? d.customType : d.bizType}\n`;
+  out += d.hasSite ? `Website: ${d.site}\n` : `Website: None — using no-website messaging\n`;
+  if(d.hasSite && d.problems) out += `Problems Spotted: ${d.problems}\n`;
+  if(d.notes) out += `Notes: ${d.notes}\n`;
+  out += `Goal: ${GOAL_LABELS[d.goal]}\n`;
+  if(d.callbackTime) out += `Best Callback Time: ${d.callbackTime}\n`;
+  out += `Tone: ${T('Chill & Casual', 'Balanced', 'Bold & Direct')}\n`;
+  out += `Mode: ${currentMode === 'phone' ? 'Phone Call' : 'In-Person'}\n`;
+  if(d.outcomes && d.outcomes.length) out += `Last Outcome(s): ${d.outcomes.map(o=>OUTCOME_LABELS[o]).join(' + ')}\n`;
+  out += `\n${'='.repeat(50)}\n\n`;
+
+  const outcomeFollowUp = buildOutcomeFollowUp(d);
+  if(outcomeFollowUp){
+    out += `FOLLOW-UP SCRIPT (${outcomeFollowUp.label})\n${'-'.repeat(30)}\n`;
+    out += `Text Message:\n${outcomeFollowUp.textMessage}\n\n`;
+    if(outcomeFollowUp.callBackOpening) out += `If You Call Back:\n${outcomeFollowUp.callBackOpening}\n\n`;
+    out += `\n`;
+  }
+
+  if(currentMode === 'phone'){
+    approaches.forEach(a=>{
+      out += `${approachHeading(a.title).toUpperCase()}\n${'-'.repeat(30)}\n`;
+      out += `After They Answer:\n${a.afterAnswer}\n\n`;
+      out += `Opening:\n${a.opening}\n\n`;
+      out += `Middle:\n${a.middle}\n\n`;
+      out += `Close:\n${a.close}\n\n`;
+      if(a.objections){
+        out += `Objection Handling:\n` + a.objections.map(o=>`${o.q}\n${o.a}`).join('\n\n') + `\n\n`;
+      }
+      out += `\n`;
+    });
+  } else {
+    approaches.forEach(a=>{
+      const ip = buildInPerson(d, a);
+      out += `${a.title.toUpperCase()} — IN-PERSON\n${'-'.repeat(30)}\n`;
+      out += `Opening:\n${ip.opening}\n\n`;
+      out += `Middle:\n${ip.middle}\n\n`;
+      out += `Close:\n${ip.close}\n\n`;
+      if(ip.objections){
+        out += `Objection Handling:\n` + ip.objections.map(o=>`${o.q}\n${o.a}`).join('\n\n') + `\n\n`;
+      }
+      out += `\n`;
+    });
+  }
+
+  const closingLines = buildClosingLines(d);
+  out += `CLOSING LINES\n${'-'.repeat(30)}\n`;
+  out += `If Interested:\n${closingLines.interested.map(l=>'- '+l).join('\n')}\n\n`;
+  out += `If Not Interested:\n${closingLines.notInterested.map(l=>'- '+l).join('\n')}\n\n`;
+  out += `If Call Later:\n${closingLines.callLater.map(l=>'- '+l).join('\n')}\n\n`;
+
+  const times = contactTimes(d.bizType);
+  out += `BEST CONTACT TIMES (${d.bizType})\n${'-'.repeat(30)}\n`;
+  out += `Phone Call: ${times.phone}\n`;
+  out += `Instagram / Facebook DM: ${times.dm}\n`;
+  out += `Email: ${times.email}\n`;
+  out += `Walk-in / In-Person: ${times.walkin}\n\n`;
+
+  out += `OBJECTION HANDLERS\n${'-'.repeat(30)}\n`;
+  buildObjections(currentTone, d).forEach(o=>{
+    out += `${o.q}\n${o.a}\n\n`;
+  });
+
+  out += `PRICING GUIDANCE\n${'-'.repeat(30)}\n`;
+  out += `${document.getElementById('pricingLine').textContent}\n\n`;
+  out += `- Don't lead with price\n- Only talk about price if they ask\n- Be willing to do $1,000 for the first few clients to get testimonials\n\n`;
+
+  return out;
+}
+
+function exportAll(d){
+  const out = exportTextFor(d);
+  downloadBlob(out, `${d.bizName.replace(/[^a-z0-9]+/gi,'_')}_call_script.txt`, 'text/plain');
+  showToast('Script exported');
+}
+
+/* ---------------- Incoming lead from Client Hub ----------------
+   The Client Hub now hands off a Firestore document id (?leadId=...) rather
+   than a JSON blob in the URL, so the script is always built from the lead as
+   it stands right now — including any edits your teammate made after the link
+   was opened. The legacy ?lead=<json> form is still honoured so older tabs or
+   bookmarks don't break. */
+function prefillFromScriptFields(f){
+  inputMode = 'single';
+  [...inputModeToggle.children].forEach(b => b.classList.toggle('active', b.dataset.inputMode === 'single'));
+  singleFields.style.display = 'block';
+  bulkFieldsEl.style.display = 'none';
+
+  const validTypes = ['Contractor','Auto Repair','Landscaping','Plumbing','Electrical','Roofing','Sealcoating / Asphalt','HVAC','Other'];
+  document.getElementById('bizName').value = f.bizName || '';
+  document.getElementById('ownerName').value = f.ownerName || '';
+  document.getElementById('phoneNumber').value = f.phone || '';
+  document.getElementById('city').value = f.city || '';
+  document.getElementById('bizType').value = validTypes.includes(f.bizType) ? f.bizType : 'Other';
+  bizTypeSelect.dispatchEvent(new Event('change'));
+  document.getElementById('customType').value = f.customType || '';
+  document.getElementById('websiteUrl').value = f.website || '';
+  document.getElementById('problems').value = f.problems || '';
+  document.getElementById('notes').value = f.notes || '';
+
+  incomingLeadFinderBizName = (f.bizName || '').trim().toLowerCase();
+  history.replaceState({}, '', location.pathname);
+  setTimeout(()=>{ document.getElementById('bizName').scrollIntoView({behavior:'smooth', block:'center'}); }, 50);
+}
+
+async function importIncomingLead(){
+  const params = new URLSearchParams(location.search);
+  const leadId = params.get('leadId');
+
+  if(leadId){
+    try{
+      const snap = await getDoc(doc(db, 'leads', leadId));
+      if(!snap.exists()){
+        showToast('That lead no longer exists in the Client Hub');
+        history.replaceState({}, '', location.pathname);
+        return;
+      }
+      incomingLeadFinderId = leadId;
+      prefillFromScriptFields(mapLeadToScriptFields(snap.data()));
+      showToast('Lead loaded from Client Hub — review and hit Generate');
+    }catch(err){
+      console.error('Could not load lead from Firestore', err);
+      showToast('Could not load that lead from the Client Hub');
+    }
+    return;
+  }
+
+  // Legacy short-key payload from an older Client Hub build.
+  const raw = params.get('lead');
+  if(!raw) return;
+  let d;
+  try{ d = JSON.parse(raw); }catch(e){ return; }
+  incomingLeadFinderId = d.lf || null;
+  prefillFromScriptFields({
+    bizName: d.n, ownerName: d.o, phone: d.p, bizType: d.t,
+    customType: d.c, website: d.w, problems: d.pr, notes: d.no
+  });
+  showToast('Lead imported from Client Hub — review and hit Generate');
+}
+
+/* Shows who's signed in, plus a way out. Built with DOM nodes rather than an
+   HTML string because the display name comes from the Google profile — this
+   page has no escaping helper, and textContent can't be tricked into markup. */
+function renderUserChip(){
+  const chip = document.getElementById('userChip');
+  const user = currentUser();
+  if(!chip || !user) return;
+  chip.style.display = 'inline-flex';
+  chip.textContent = '';
+  if(user.photoURL){
+    const img = document.createElement('img');
+    img.src = user.photoURL;
+    img.alt = '';
+    img.referrerPolicy = 'no-referrer';
+    chip.appendChild(img);
+  }
+  const label = document.createElement('span');
+  label.textContent = user.displayName || user.email || '';
+  chip.appendChild(label);
+  const out = document.createElement('button');
+  out.type = 'button';
+  out.textContent = 'Sign out';
+  out.title = 'Sign out';
+  out.addEventListener('click', () => { signOutUser().then(() => location.reload()); });
+  chip.appendChild(out);
+}
+
+/* ---------------- Boot ----------------
+   Nothing runs until an approved Google account is signed in. */
+requireAuth(() => {
+  initAppNav('script');
+  renderUserChip();
+  startHistorySync();
+  importIncomingLead();
+});
+
+})();
+</script>
+</body>
+</html>

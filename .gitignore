@@ -1,0 +1,6 @@
+# Firebase local deploy cache — regenerated on every deploy, never commit.
+.firebase/
+
+# OS / editor noise
+Thumbs.db
+.DS_Store

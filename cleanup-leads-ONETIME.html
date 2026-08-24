@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forge Digital — ONE-TIME lead cleanup</title>
+<!--
+  ONE-OFF DESTRUCTIVE TOOL. Deliberately kept OUTSIDE public/ so it can never
+  be published by `firebase deploy` and never sits live on the internet-facing
+  site. Run it locally (see instructions at the bottom of this comment), use
+  it once, then delete this file.
+
+  It talks directly to the real, live Firestore database — same project,
+  same data everyone sees. There is no "undo" for a delete. Nothing is
+  deleted until you have reviewed a full, named preview (exactly which
+  leads are kept, exactly which are deleted) and clicked the single
+  "Confirm Delete" button — one click, one writeBatch, no per-row prompts.
+
+  WHAT IT DOES
+  - Reads every document in the `leads` collection (both Active and History
+    — they're the same collection, split only by status).
+  - Compares each lead's business name against a fixed keep-list, using an
+    EXACT match (lowercased, trimmed, internal whitespace collapsed) — no
+    fuzzy matching, no substring matching. A name has to match one of the
+    seven exactly or it's marked for deletion.
+  - Shows you, before anything happens: how many matched each keep-name
+    (flagging 0 matches as a likely typo, and >1 as duplicate businesses
+    under the same name), and the full list of everything slated for
+    deletion.
+  - Only deletes after you type DELETE into a confirmation field.
+  - Re-reads the collection from Firestore afterward and shows what's
+    actually left — not just what the tool assumes happened.
+
+  WHAT IT NEVER TOUCHES
+  callHistory (Script Generator's call log), leadDecisions (Find New Leads
+  approve/decline history), and config (Apify token) are untouched. Only the
+  `leads` collection is read or written by this tool.
+
+  HOW TO RUN IT
+  This is an ES module and needs http(s), not file:// (same reason as the
+  rest of the app — see README-FIREBASE.md). From the REPO ROOT (the folder
+  containing this file and the public/ folder, NOT inside public/ itself),
+  serve it locally. If you don't have Python or Node, PowerShell can do it
+  with no install — save this as serve-root.ps1 next to this file and run it:
+
+    $root = $PSScriptRoot
+    $listener = New-Object System.Net.HttpListener
+    $listener.Prefixes.Add('http://localhost:8899/')
+    $listener.Start()
+    Write-Host "serving $root on http://localhost:8899/"
+    $types = @{ '.html'='text/html; charset=utf-8'; '.js'='text/javascript; charset=utf-8' }
+    while ($listener.IsListening) {
+      $ctx = $listener.GetContext()
+      $rel = [System.Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath).TrimStart('/')
+      $path = Join-Path $root $rel
+      if (Test-Path -LiteralPath $path -PathType Leaf) {
+        $ext = [System.IO.Path]::GetExtension($path).ToLower()
+        $ct = $types[$ext]; if (-not $ct) { $ct = 'application/octet-stream' }
+        $bytes = [System.IO.File]::ReadAllBytes($path)
+        $ctx.Response.ContentType = $ct; $ctx.Response.StatusCode = 200
+        $ctx.Response.OutputStream.Write($bytes,0,$bytes.Length)
+      } else { $ctx.Response.StatusCode = 404 }
+      $ctx.Response.OutputStream.Close()
+    }
+
+  Then run:  powershell -ExecutionPolicy Bypass -File serve-root.ps1
+  And open:  http://localhost:8899/cleanup-leads-ONETIME.html
+  Sign in with your approved Google account when prompted.
+
+  WHEN YOU'RE DONE
+  Delete this file (and serve-root.ps1). Never let it reach public/ or a
+  deploy.
+-->
+<style>
+  :root{
+    --bg:#060209; --bg-alt:#0d0716; --panel:#120a1f; --panel-2:#170c27;
+    --border:#2d1a4d; --border-hover:#47297a; --text:#f3eefc; --text-dim:#ac9ccb;
+    --text-faint:#6c5e90; --purple:#8b2fe0; --purple-bright:#c07bff; --purple-dim:#4c1d95;
+    --green:#2fe0a0; --amber:#ffb84d; --red:#ff5d7a; --radius:14px; --radius-sm:9px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
+    max-width:900px;margin:0 auto;padding:32px 20px 80px;line-height:1.5;
+  }
+  h1{font-size:22px;font-weight:800;margin-bottom:4px;}
+  .sub{color:var(--text-dim);font-size:13.5px;margin-bottom:22px;}
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--bg-alt));border:1px solid var(--border);
+    border-radius:var(--radius);padding:20px;margin-bottom:18px;
+  }
+  .card h2{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:var(--purple-bright);margin-bottom:12px;}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px;}
+  .row:last-child{border-bottom:none;}
+  .badge{font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap;}
+  .badge.ok{background:rgba(47,224,160,0.15);color:var(--green);border:1px solid rgba(47,224,160,0.35);}
+  .badge.warn{background:rgba(255,184,77,0.15);color:var(--amber);border:1px solid rgba(255,184,77,0.35);}
+  .badge.bad{background:rgba(255,93,122,0.15);color:#ff8fa3;border:1px solid rgba(255,93,122,0.35);}
+  .scroll{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:#0c0716;}
+  .scroll .row{padding:8px 12px;}
+  .muted{color:var(--text-faint);font-size:12px;}
+  .warn-note{
+    font-size:12.5px;color:#ffd9a0;background:rgba(255,184,77,0.09);
+    border:1px solid rgba(255,184,77,0.32);border-radius:var(--radius-sm);padding:12px 14px;line-height:1.6;margin-bottom:14px;
+  }
+  .warn-note strong{color:var(--amber);}
+  input[type=text]{
+    width:100%;background:#0c0716;border:1px solid var(--border);color:var(--text);
+    font-size:15px;padding:11px 13px;border-radius:var(--radius-sm);font-family:inherit;
+  }
+  input[type=text]:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(255,93,122,0.2);}
+  button{
+    font-family:inherit;font-size:14px;font-weight:800;padding:12px 20px;border-radius:var(--radius-sm);
+    cursor:pointer;border:none;
+  }
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-danger{background:linear-gradient(135deg,#ff5d7a,#a11c3a);color:#fff;box-shadow:0 4px 16px rgba(255,93,122,0.35);}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-dim);}
+  .center{text-align:center;padding:40px 20px;}
+  .spinner{width:30px;height:30px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--purple);animation:spin .7s linear infinite;margin:0 auto 16px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #host{display:none;}
+</style>
+</head>
+<body>
+  <h1>⚠ One-time lead cleanup</h1>
+  <p class="sub">Reads and can permanently delete documents in the live <code>leads</code> collection. Review carefully before confirming.</p>
+  <div id="gate" class="center"><div class="spinner"></div><p>Waiting for sign-in…</p></div>
+  <div id="host"></div>
+
+<script type="module">
+import {
+  db, collection, getDocs, doc, writeBatch, requireAuth, currentUser
+} from './public/forge-shared.js';
+
+const KEEP_NAMES = [
+  'Brouse Landscaping',
+  'BVL Contracting LLC',
+  'Rotz General Contracting',
+  'Roofing & General Contracting',
+  'Mayger General Contracting LLC',
+  'Marcelis Contracting',
+  'Kitchen & Bathroom Remodeling'
+];
+function normalizeName(s) {
+  return (s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+}
+const KEEP_KEYS = KEEP_NAMES.map(normalizeName);
+
+const host = document.getElementById('host');
+const gate = document.getElementById('gate');
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function fetchAllLeads() {
+  const snap = await getDocs(collection(db, 'leads'));
+  return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+}
+
+function classify(leads) {
+  const keepBuckets = KEEP_NAMES.map(() => []);
+  const toDelete = [];
+  leads.forEach(l => {
+    const key = normalizeName(l.businessName);
+    const idx = KEEP_KEYS.indexOf(key);
+    if (idx !== -1) keepBuckets[idx].push(l);
+    else toDelete.push(l);
+  });
+  return { keepBuckets, toDelete };
+}
+
+function renderPreview(leads) {
+  const { keepBuckets, toDelete } = classify(leads);
+  const totalKeep = keepBuckets.reduce((n, b) => n + b.length, 0);
+  const zeroMatch = KEEP_NAMES.filter((_, i) => keepBuckets[i].length === 0);
+  const dupMatch = KEEP_NAMES.map((n, i) => ({ n, count: keepBuckets[i].length })).filter(x => x.count > 1);
+
+  host.style.display = 'block';
+  host.innerHTML = `
+    <div class="card">
+      <h2>Scanned</h2>
+      <div class="row"><span>Total documents in <code>leads</code></span><span><b>${leads.length}</b></span></div>
+      <div class="row"><span>Will be kept (exact name match)</span><span class="badge ok">${totalKeep}</span></div>
+      <div class="row"><span>Will be permanently deleted</span><span class="badge bad">${toDelete.length}</span></div>
+    </div>
+
+    ${zeroMatch.length ? `<div class="warn-note">
+      <strong>⚠ ${zeroMatch.length} of your 7 keep-names matched NOTHING in the database:</strong><br>
+      ${zeroMatch.map(esc).join('<br>')}<br><br>
+      This usually means a small wording difference (an extra space, "LLC" vs no "LLC", a different
+      "&amp;" character). Nothing bad happens from this by itself — it just means that business won't
+      survive the cleanup as-is. Check the name against what's actually stored before deleting, or it will
+      be deleted along with everything else.
+    </div>` : ''}
+
+    ${dupMatch.length ? `<div class="warn-note">
+      <strong>Note: some keep-names matched more than one document</strong> (duplicate entries with the
+      identical name) — all of them will be kept, not just one:<br>
+      ${dupMatch.map(x => `${esc(x.n)} — ${x.count} matches`).join('<br>')}
+    </div>` : ''}
+
+    <div class="card">
+      <h2>Will be KEPT (${totalKeep})</h2>
+      <div class="scroll">
+        ${KEEP_NAMES.map((n, i) => keepBuckets[i].length
+          ? keepBuckets[i].map(l => `<div class="row"><span>${esc(l.businessName)} <span class="muted">${esc(l.phone||'')} · ${esc(l.status||'')} · ${esc(l.id)}</span></span><span class="badge ok">keep</span></div>`).join('')
+          : `<div class="row"><span>${esc(n)}</span><span class="badge warn">0 found</span></div>`
+        ).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Will be DELETED (${toDelete.length})</h2>
+      <div class="scroll">
+        ${toDelete.length ? toDelete.map(l => `<div class="row"><span>${esc(l.businessName || '(no name)')} <span class="muted">${esc(l.phone||'')} · ${esc(l.status||'')} · ${esc(l.id)}</span></span><span class="badge bad">delete</span></div>`).join('') : '<div class="row"><span class="muted">Nothing to delete.</span></div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Confirm</h2>
+      <p style="margin-bottom:12px;">This permanently deletes <b>${toDelete.length}</b> documents from the live, shared database in one batch. There is no undo.</p>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-ghost" id="rescanBtn">↻ Re-scan (in case data changed)</button>
+        <button class="btn-danger" id="deleteBtn" ${toDelete.length ? '' : 'disabled'}>Confirm Delete (${toDelete.length})</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('rescanBtn').addEventListener('click', run);
+  document.getElementById('deleteBtn').addEventListener('click', () => doDelete(toDelete));
+}
+
+async function doDelete(toDelete) {
+  host.innerHTML = `<div class="card center"><div class="spinner"></div><h2 style="margin-top:10px;">Deleting ${toDelete.length} leads…</h2><p class="muted" id="delProgress">Starting…</p></div>`;
+  const CHUNK = 400;
+  let done = 0;
+  try {
+    for (let i = 0; i < toDelete.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      toDelete.slice(i, i + CHUNK).forEach(l => batch.delete(doc(db, 'leads', l.id)));
+      await batch.commit();
+      done += Math.min(CHUNK, toDelete.length - i);
+      const p = document.getElementById('delProgress');
+      if (p) p.textContent = `${done} of ${toDelete.length} deleted…`;
+    }
+  } catch (err) {
+    host.innerHTML = `<div class="card"><h2 style="color:var(--red);">Delete failed partway through</h2>
+      <p>${esc(err.message || String(err))}</p>
+      <p class="muted">${done} of ${toDelete.length} were deleted before the error. Re-scan to see the real current state — it's safe to run again, since anything already deleted just won't appear a second time.</p>
+      <button class="btn-ghost" id="rescanBtn2">↻ Re-scan</button></div>`;
+    document.getElementById('rescanBtn2').addEventListener('click', run);
+    return;
+  }
+  await showFinalState(done);
+}
+
+async function showFinalState(deletedCount) {
+  const leads = await fetchAllLeads();
+  const rows = leads.map(l => `<div class="row"><span>${esc(l.businessName)} <span class="muted">${esc(l.phone||'')} · ${esc(l.status||'')} · ${esc(l.id)}</span></span><span class="badge ok">present</span></div>`).join('');
+  host.innerHTML = `
+    <div class="card">
+      <h2>Done</h2>
+      <div class="row"><span>Leads deleted this run</span><span class="badge bad">${deletedCount}</span></div>
+      <div class="row"><span>Leads remaining in the database (just re-read from Firestore)</span><span class="badge ok">${leads.length}</span></div>
+    </div>
+    <div class="card">
+      <h2>What's actually left</h2>
+      <div class="scroll">${rows || '<div class="row"><span class="muted">Nothing left.</span></div>'}</div>
+    </div>
+    <p class="muted">Safe to close this tab now. Delete this file (and serve-root.ps1) before your next deploy.</p>
+  `;
+}
+
+async function run() {
+  host.style.display = 'none';
+  host.innerHTML = '';
+  gate.style.display = 'block';
+  gate.innerHTML = '<div class="spinner"></div><p>Reading the leads collection…</p>';
+  try {
+    const leads = await fetchAllLeads();
+    gate.style.display = 'none';
+    renderPreview(leads);
+  } catch (err) {
+    gate.innerHTML = `<p style="color:var(--red);">Failed to read leads: ${esc(err.message || String(err))}</p>`;
+  }
+}
+
+requireAuth(() => {
+  gate.innerHTML = `<div class="spinner"></div><p>Signed in as ${esc((currentUser()||{}).email||'')}. Loading…</p>`;
+  run();
+});
+</script>
+</body>
+</html>

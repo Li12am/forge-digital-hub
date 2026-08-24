@@ -1,0 +1,62 @@
+rules_version = '2';
+
+/* ============================================================
+   Forge Digital — Firestore security rules
+   ------------------------------------------------------------
+   THIS is the real lock on the data. The ALLOWED_EMAILS list in
+   public/forge-shared.js only decides what the page shows; anyone
+   can edit that copy in their own browser. These rules run on
+   Google's servers and cannot be bypassed.
+
+   Keep the two lists in sync, and re-deploy after any change:
+       firebase deploy --only firestore:rules
+   ============================================================ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isApproved() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+             'liam.coughlin1@gmail.com',
+             'thomas.chkuaseli06@gmail.com'
+           ];
+    }
+
+    // Shared lead pipeline. Active vs. History is derived from the
+    // `status` field by the client, so both live in this one collection.
+    match /leads/{leadId} {
+      allow read, write: if isApproved();
+    }
+
+    // Shared call history, one document per business.
+    match /callHistory/{entryId} {
+      allow read, write: if isApproved();
+    }
+
+    /* Approve/decline decisions from the Find New Leads discovery flow.
+       Keeps declined businesses from ever being shown again, and is the
+       raw material for smarter targeting later. */
+    match /leadDecisions/{decisionId} {
+      allow read, write: if isApproved();
+    }
+
+    /* Private settings — notably the Apify API token.
+       This is why the token is NOT hardcoded into the site's JavaScript:
+       Firebase Hosting serves every file under public/ to anyone on the
+       internet (the sign-in gate is client-side JS that runs only AFTER the
+       file has already been downloaded). A token in the source would be
+       world-readable. Stored here instead, it is readable only by the two
+       approved accounts, enforced server-side by this rule. */
+    match /config/{docId} {
+      allow read, write: if isApproved();
+    }
+
+    // Anything not named above is denied outright, so a future typo in a
+    // collection name fails closed rather than silently opening up.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

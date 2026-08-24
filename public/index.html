@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>Forge Digital — Workspace</title>
+<style>
+:root{
+  --bg:#05070d;
+  --bg-alt:#080c16;
+  --panel:#0d1220;
+  --panel-2:#111830;
+  --border:#1c2540;
+  --border-hover:#2a3660;
+  --text:#e8ecf7;
+  --text-dim:#8b93b0;
+  --text-faint:#5a6285;
+  --blue:#2f8fff;
+  --blue-bright:#5ab0ff;
+  --blue-dim:#1a5fc4;
+  --purple:#8b2fe0;
+  --purple-bright:#c07bff;
+  --glow:rgba(47,143,255,0.35);
+  /* Consumed by the shared sign-in gate in forge-shared.js. */
+  --accent:#2f8fff;
+  --accent-bright:#5ab0ff;
+  --green:#2fe0a0;
+  --amber:#ffb84d;
+  --red:#ff5d7a;
+  --radius:16px;
+  --radius-sm:10px;
+  font-size:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Inter',Roboto,Helvetica,Arial,sans-serif;
+  min-height:100vh;
+}
+body{
+  background:
+    radial-gradient(circle at 12% -5%, rgba(47,143,255,0.16), transparent 46%),
+    radial-gradient(circle at 88% 8%, rgba(139,47,224,0.13), transparent 44%),
+    var(--bg);
+  padding-bottom:70px;
+}
+::selection{background:var(--blue);color:#fff;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-track{background:var(--bg-alt);}
+::-webkit-scrollbar-thumb{background:#1d2743;border-radius:10px;}
+::-webkit-scrollbar-thumb:hover{background:var(--blue-dim);}
+a{color:var(--blue-bright);}
+.hidden{display:none !important;}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 26px;}
+
+/* ---------- Header ---------- */
+header.top{
+  position:sticky;top:0;z-index:100;
+  backdrop-filter:blur(16px);
+  background:rgba(6,9,17,0.8);
+  border-bottom:1px solid var(--border);
+}
+.top-inner{
+  max-width:1080px;margin:0 auto;padding:15px 26px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+}
+.brand{display:flex;align-items:center;gap:12px;}
+.brand-mark{
+  width:38px;height:38px;border-radius:11px;
+  background:linear-gradient(135deg,var(--blue),var(--purple));
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:17px;color:#fff;
+  box-shadow:0 0 24px rgba(90,120,255,0.45);flex-shrink:0;
+}
+.brand-text .name{font-weight:700;font-size:16px;letter-spacing:0.2px;}
+.brand-text .sub{font-size:11px;color:var(--text-dim);letter-spacing:1.3px;text-transform:uppercase;}
+
+.user-chip{
+  display:inline-flex;align-items:center;gap:7px;background:var(--panel-2);
+  border:1px solid var(--border);border-radius:999px;padding:5px 6px 5px 10px;
+  font-size:12px;font-weight:600;color:var(--text-dim);white-space:nowrap;
+}
+.user-chip img{width:22px;height:22px;border-radius:50%;}
+.user-chip button{
+  background:none;border:none;color:var(--text-faint);font-size:11.5px;font-weight:700;
+  cursor:pointer;padding:2px 6px;border-radius:999px;
+}
+.user-chip button:hover{color:var(--red);}
+
+/* ---------- Hero ---------- */
+.hero{padding:64px 0 26px;text-align:center;animation:riseIn .55s cubic-bezier(.22,1,.36,1) both;}
+.hero .eyebrow{
+  display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;
+  color:var(--blue-bright);background:rgba(47,143,255,0.1);border:1px solid rgba(47,143,255,0.28);
+  padding:6px 14px;border-radius:999px;margin-bottom:20px;
+}
+.hero h1{font-size:clamp(30px,5vw,46px);font-weight:800;letter-spacing:-1px;line-height:1.1;}
+.hero h1 span{
+  background:linear-gradient(100deg,var(--blue-bright),var(--purple-bright));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.hero p{color:var(--text-dim);margin:14px auto 0;font-size:15.5px;max-width:520px;line-height:1.6;}
+
+@keyframes riseIn{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+
+/* ---------- Stat strip ---------- */
+.stat-strip{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:38px;
+  animation:riseIn .55s cubic-bezier(.22,1,.36,1) .06s both;
+}
+@media (max-width:760px){.stat-strip{grid-template-columns:1fr 1fr;}}
+.stat-box{
+  background:linear-gradient(180deg,var(--panel),var(--bg-alt));
+  border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px 16px;text-align:center;transition:border-color .2s ease,transform .2s ease;
+}
+.stat-box:hover{border-color:var(--border-hover);transform:translateY(-2px);}
+.stat-box .num{font-size:27px;font-weight:800;letter-spacing:-0.5px;line-height:1.1;}
+.stat-box .lbl{font-size:11.5px;color:var(--text-faint);margin-top:5px;font-weight:600;letter-spacing:0.4px;}
+.stat-box.due .num{color:var(--amber);}
+.stat-box.hot .num{color:#ff8fa3;}
+.stat-box.ok .num{color:var(--green);}
+
+/* ---------- App cards ---------- */
+.apps{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px;}
+@media (max-width:760px){.apps{grid-template-columns:1fr;}}
+.app-card{
+  position:relative;overflow:hidden;text-decoration:none;color:inherit;display:block;
+  background:linear-gradient(180deg,var(--panel),var(--bg-alt));
+  border:1px solid var(--border);border-radius:var(--radius);padding:26px;
+  transition:transform .24s cubic-bezier(.22,1,.36,1),border-color .24s ease,box-shadow .24s ease;
+  animation:riseIn .55s cubic-bezier(.22,1,.36,1) .12s both;
+}
+.app-card::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(120,160,255,0.5),transparent);
+}
+.app-card:hover{transform:translateY(-4px);border-color:var(--border-hover);box-shadow:0 22px 54px rgba(0,0,0,0.45);}
+.app-card.blue:hover{box-shadow:0 22px 54px rgba(0,0,0,0.45),0 0 34px rgba(47,143,255,0.24);}
+.app-card.purple:hover{box-shadow:0 22px 54px rgba(0,0,0,0.45),0 0 34px rgba(139,47,224,0.26);}
+.app-mark{
+  width:52px;height:52px;border-radius:15px;margin-bottom:16px;
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:19px;
+}
+.app-card.blue .app-mark{background:linear-gradient(135deg,var(--blue-bright),var(--blue-dim));box-shadow:0 6px 22px rgba(47,143,255,0.42);}
+.app-card.purple .app-mark{background:linear-gradient(135deg,var(--purple-bright),#4c1d95);box-shadow:0 6px 22px rgba(139,47,224,0.42);}
+.app-card h2{font-size:19px;font-weight:800;letter-spacing:-0.3px;}
+.app-card p{color:var(--text-dim);font-size:13.5px;line-height:1.6;margin-top:7px;}
+.app-card .go{
+  margin-top:16px;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;gap:6px;
+  transition:gap .2s ease;
+}
+.app-card.blue .go{color:var(--blue-bright);}
+.app-card.purple .go{color:var(--purple-bright);}
+.app-card:hover .go{gap:11px;}
+
+/* ---------- Due list ---------- */
+.section-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin:38px 0 12px;flex-wrap:wrap;
+}
+.section-head h3{font-size:14px;font-weight:800;letter-spacing:0.3px;}
+.section-head a{font-size:12.5px;font-weight:700;text-decoration:none;}
+.due-list{display:flex;flex-direction:column;gap:9px;animation:riseIn .5s ease .18s both;}
+.due-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  background:linear-gradient(180deg,var(--panel),var(--bg-alt));
+  border:1px solid var(--border);border-radius:var(--radius-sm);padding:13px 16px;
+  transition:border-color .2s ease,transform .2s ease;
+}
+.due-row:hover{border-color:var(--border-hover);transform:translateX(2px);}
+.due-row .who{min-width:0;}
+.due-row .biz{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.due-row .meta{font-size:11.5px;color:var(--text-faint);margin-top:2px;}
+.due-tag{font-size:11px;font-weight:800;padding:5px 11px;border-radius:999px;white-space:nowrap;flex-shrink:0;}
+.due-tag.overdue{background:rgba(255,93,122,0.14);color:#ff8fa3;border:1px solid rgba(255,93,122,0.34);}
+.due-tag.today{background:rgba(255,184,77,0.14);color:var(--amber);border:1px solid rgba(255,184,77,0.34);}
+.empty-note{
+  border:1px dashed var(--border);border-radius:var(--radius);padding:34px 20px;
+  text-align:center;color:var(--text-faint);font-size:13.5px;
+}
+footer.foot{text-align:center;color:var(--text-faint);font-size:12px;margin-top:56px;}
+@media (max-width:640px){.wrap{padding:0 16px;}.top-inner{padding:14px 16px;}.hero{padding:44px 0 20px;}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <button class="brand fd-nav-trigger" data-fd-nav-trigger type="button" title="Open Forge Digital menu">
+      <div class="brand-mark">FD</div>
+      <div class="brand-text">
+        <div class="name">Forge Digital</div>
+        <div class="sub">Workspace</div>
+      </div>
+    </button>
+    <span id="userChip" class="user-chip hidden"></span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Forge Digital Workspace</div>
+    <h1>Everything you need to <span>win the next job.</span></h1>
+    <p>Find the businesses nobody's selling to yet, then build the call that closes them — all shared live with your team.</p>
+  </div>
+
+  <div class="stat-strip" id="statStrip"></div>
+
+  <div class="apps">
+    <a href="client-hub.html" class="app-card purple">
+      <div class="app-mark">FD</div>
+      <h2>Client Hub</h2>
+      <p>Every lead you're working — find them, score them, track status from first contact through to close, and never call the same business twice.</p>
+      <div class="go">Open Client Hub →</div>
+    </a>
+    <a href="script-generator.html" class="app-card blue">
+      <div class="app-mark">FD</div>
+      <h2>Script Generator</h2>
+      <p>Eight battle-tested call approaches, objection handlers, and follow-up texts — built around the exact business you're about to ring.</p>
+      <div class="go">Open Script Generator →</div>
+    </a>
+  </div>
+
+  <div class="section-head">
+    <h3>Needs a follow-up</h3>
+    <a href="client-hub.html" style="color:var(--purple-bright);">View all in Client Hub →</a>
+  </div>
+  <div id="dueList" class="due-list"></div>
+
+  <footer class="foot">Forge Digital · Built to find who needs you most</footer>
+</div>
+
+<script type="module">
+import {
+  db, collection, onSnapshot,
+  requireAuth, currentUser, signOutUser, initAppNav,
+  leadBucket, followUpLabel, daysUntilIso, isTerminalStatus, DEFAULT_STATUS
+} from './forge-shared.js';
+
+(function(){
+
+/* Someone following an old bookmark to index.html?leadId=… was, before the
+   Workspace existed, landing on the Script Generator. Forward those through
+   rather than silently dropping the hand-off on this page. */
+(function forwardLegacyHandoff(){
+  const params = new URLSearchParams(location.search);
+  if (params.get('leadId') || params.get('lead')) {
+    location.replace('script-generator.html' + location.search);
+  }
+})();
+
+let allLeads = [];
+
+function esc(str){
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function renderUserChip(){
+  const chip = document.getElementById('userChip');
+  const user = currentUser();
+  if (!user) return;
+  chip.classList.remove('hidden');
+  chip.textContent = '';
+  if (user.photoURL){
+    const img = document.createElement('img');
+    img.src = user.photoURL; img.alt = ''; img.referrerPolicy = 'no-referrer';
+    chip.appendChild(img);
+  }
+  const label = document.createElement('span');
+  label.textContent = user.displayName || user.email || '';
+  chip.appendChild(label);
+  const out = document.createElement('button');
+  out.type = 'button'; out.textContent = 'Sign out'; out.title = 'Sign out';
+  out.addEventListener('click', () => { signOutUser().then(() => location.reload()); });
+  chip.appendChild(out);
+}
+
+function render(){
+  const active = allLeads.filter(l => leadBucket(l) === 'active');
+  const followups = allLeads.filter(l => leadBucket(l) === 'followups');
+  const history = allLeads.filter(l => leadBucket(l) === 'history');
+
+  // Anything due today or already overdue is what actually needs attention now.
+  const due = followups
+    .filter(l => { const d = daysUntilIso(l.followUpDueDate); return d !== null && d <= 0; })
+    .sort((a,b) => (daysUntilIso(a.followUpDueDate) || 0) - (daysUntilIso(b.followUpDueDate) || 0));
+
+  document.getElementById('statStrip').innerHTML = `
+    <div class="stat-box"><div class="num">${active.length}</div><div class="lbl">Active leads</div></div>
+    <div class="stat-box due"><div class="num">${due.length}</div><div class="lbl">Due now</div></div>
+    <div class="stat-box"><div class="num">${followups.length}</div><div class="lbl">In follow-up</div></div>
+    <div class="stat-box ok"><div class="num">${history.length}</div><div class="lbl">In history</div></div>
+  `;
+
+  const listEl = document.getElementById('dueList');
+  if (!due.length){
+    listEl.innerHTML = `<div class="empty-note">Nothing due right now — you're all caught up.</div>`;
+    return;
+  }
+  listEl.innerHTML = due.slice(0, 6).map(l => {
+    const label = followUpLabel(l.followUpDueDate);
+    return `<div class="due-row">
+      <div class="who">
+        <div class="biz">${esc(l.businessName || 'Untitled lead')}</div>
+        <div class="meta">${esc(l.status || DEFAULT_STATUS)}${l.city ? ' · ' + esc(l.city) : ''}${l.phone ? ' · ' + esc(l.phone) : ''}</div>
+      </div>
+      <span class="due-tag ${label.tone === 'overdue' ? 'overdue' : 'today'}">${esc(label.text)}</span>
+    </div>`;
+  }).join('');
+}
+
+function start(){
+  initAppNav('workspace');
+  renderUserChip();
+  onSnapshot(collection(db, 'leads'), (snap) => {
+    allLeads = snap.docs.map(d => Object.assign({}, d.data(), { id: d.id }));
+    render();
+  }, (err) => {
+    console.error('Workspace lead sync failed', err);
+    document.getElementById('dueList').innerHTML =
+      `<div class="empty-note">Couldn't reach the shared database — check your access rules.</div>`;
+  });
+  // Roll the relative day labels over if the page is left open past midnight.
+  setInterval(render, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+}
+
+requireAuth(() => start());
+
+})();
+</script>
+</body>
+</html>
