@@ -215,6 +215,7 @@ header.top{
 .field input[type=text],
 .field input[type=tel],
 .field input[type=url],
+.field input[type=date],
 .field textarea,
 .field select{
   width:100%;
@@ -235,6 +236,7 @@ header.top{
   border-color:var(--blue);
   box-shadow:0 0 0 3px rgba(47,143,255,0.18);
 }
+.field input[type=date]{color-scheme:dark;cursor:pointer;}
 .field select{
   appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b93b0' stroke-width='1.6' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
@@ -1341,7 +1343,7 @@ import {
   db, collection, doc, addDoc, updateDoc, deleteDoc, getDoc, onSnapshot, serverTimestamp, increment,
   requireAuth, currentUser, signOutUser, initAppNav,
   statusFromOutcomes, isTerminalStatus, mapLeadToScriptFields, stripUndefined, todayIso,
-  followUpFieldsForCall, followUpLabel, FOLLOWUP_DEFAULT_DAYS,
+  followUpFieldsForCall, followUpLabel, FOLLOWUP_DEFAULT_DAYS, addDaysIso,
   callViaGoogleVoice
 } from './forge-shared.js';
 
@@ -1359,6 +1361,7 @@ let currentBatch = [];   // array of data objects from the most recent bulk gene
 let activeBatchKey = null;
 let pendingOutcomes = []; // outcomes toggled on for the call about to be logged, not yet saved
 let pendingNotes = '';    // notes typed for that not-yet-logged call
+let pendingFollowUpDate = null;  // date typed/picked for the follow-up on this not-yet-logged call
 let callLogTab = 'followup'; // 'followup' | 'general' — active tab in the Call Log panel
 // Set by importIncomingLead() below when this page was opened from the Client
 // Hub's "Send to Script Generator" button. Threaded onto generated business
@@ -1418,13 +1421,14 @@ function migrateEntry(entry){
 /* Writes the outcome of a logged call back onto the originating Client Hub
    lead. statusFromOutcomes and isTerminalStatus are imported from the shared
    module so both apps agree on exactly what "Not Interested" means and which
-   statuses drop a lead into permanent History. */
-function pushStatusToClientHub(leadId, outcomes){
+   statuses drop a lead into permanent History. explicitDate carries whatever
+   was in the follow-up date field (or is null, meaning use the default). */
+function pushStatusToClientHub(leadId, outcomes, explicitDate){
   // followUpFieldsForCall is shared with the Client Hub's own quick-log
   // buttons, so a call logged here produces exactly the same fields: status,
   // the exact call timestamp, and the next follow-up date. Writing lastCallAt
   // is what moves the lead out of Active and into the Follow-ups tab.
-  const fields = followUpFieldsForCall(outcomes, FOLLOWUP_DEFAULT_DAYS);
+  const fields = followUpFieldsForCall(outcomes, FOLLOWUP_DEFAULT_DAYS, explicitDate);
   const patch = Object.assign({}, fields, {
     callCount: increment(1),
     updatedAt: serverTimestamp()
@@ -1574,6 +1578,7 @@ function openHistoryEntry(id, jumpToFollowUp, entryOutcomes){
   regenSeeds = {};
   pendingOutcomes = [];
   pendingNotes = '';
+  pendingFollowUpDate = null;
 
   renderHistoryPanel();
   renderCallLogPanel();
@@ -3112,6 +3117,7 @@ function runSingleGenerate(){
   regenSeeds = {};
   pendingOutcomes = [];
   pendingNotes = '';
+  pendingFollowUpDate = null;
 
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
@@ -3186,6 +3192,7 @@ async function runBulkGenerate(){
   regenSeeds = {};
   pendingOutcomes = [];
   pendingNotes = '';
+  pendingFollowUpDate = null;
   render();
   showToast(`Generated ${batch.length} businesses`);
 }
@@ -3291,12 +3298,26 @@ function render(){
   const currentHistoryEntry = historyList.find(h => h.key === (d.bizName||'').trim().toLowerCase());
   const pastCalls = currentHistoryEntry ? (currentHistoryEntry.outcomeLog || []) : [];
   const lastCall = pastCalls.length ? pastCalls[pastCalls.length - 1] : null;
+  // The date field only makes sense when there's a Client Hub lead behind
+  // this session (d.leadFinderId) -- that's the only place a follow-up date
+  // actually gets written to -- and only for outcomes that don't send the
+  // lead straight to History, where a follow-up date would be meaningless.
+  const showFollowUpDate = !!d.leadFinderId && pendingOutcomes.length > 0 && !isTerminalStatus(statusFromOutcomes(pendingOutcomes));
   html += `
   <div class="section-block" style="margin-top:22px;">
     <div class="panel-title"><span class="dot"></span>Log This Call</div>
     <div class="outcome-row" id="outcomeRow">
       ${Object.keys(OUTCOME_LABELS).map(k=>`<button class="outcome-btn ${pendingOutcomes.includes(k)?'active':''}" data-outcome="${k}">${OUTCOME_LABELS[k]}</button>`).join('')}
     </div>
+    ${showFollowUpDate ? `
+    <div class="field" style="margin:12px 0 0;">
+      <label>Follow-up date <span class="opt">(defaults to ${FOLLOWUP_DEFAULT_DAYS} days out if you leave it)</span></label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="date" id="followUpDateInput" value="${pendingFollowUpDate || addDaysIso(todayIso(), FOLLOWUP_DEFAULT_DAYS)}" style="width:auto;flex:1 1 160px;">
+        <button type="button" class="btn-ghost" id="fuShortcut1Btn" style="padding:9px 12px;font-size:12px;">+1d</button>
+        <button type="button" class="btn-ghost" id="fuShortcut3Btn" style="padding:9px 12px;font-size:12px;">+3d</button>
+      </div>
+    </div>` : ''}
     <div class="field" style="margin:10px 0 0;">
       <textarea id="callNotesInput" rows="2" placeholder="Quick note for this call — optional, e.g. wants pricing by Friday">${pendingNotes}</textarea>
     </div>
@@ -3517,6 +3538,7 @@ function wireOutputEvents(approaches, d){
       regenSeeds = {};
       pendingOutcomes = [];
       pendingNotes = '';
+  pendingFollowUpDate = null;
       render();
     });
   }
@@ -3566,6 +3588,32 @@ function wireOutputEvents(approaches, d){
     callNotesInput.addEventListener('input', ()=>{ pendingNotes = callNotesInput.value; });
   }
 
+  /* Follow-up date field — same "track in a variable, don't re-render on every
+     keystroke" pattern as the notes field above. The +1d/+3d shortcuts write
+     straight into the input (no render() call) so there's no flicker, and
+     mirror the value into pendingFollowUpDate so it survives if something
+     else re-renders the panel before Log This Call is clicked. */
+  const followUpDateInput = document.getElementById('followUpDateInput');
+  if(followUpDateInput){
+    followUpDateInput.addEventListener('input', ()=>{ pendingFollowUpDate = followUpDateInput.value; });
+  }
+  const fuShortcut1Btn = document.getElementById('fuShortcut1Btn');
+  if(fuShortcut1Btn){
+    fuShortcut1Btn.addEventListener('click', ()=>{
+      const val = addDaysIso(todayIso(), 1);
+      pendingFollowUpDate = val;
+      if(followUpDateInput) followUpDateInput.value = val;
+    });
+  }
+  const fuShortcut3Btn = document.getElementById('fuShortcut3Btn');
+  if(fuShortcut3Btn){
+    fuShortcut3Btn.addEventListener('click', ()=>{
+      const val = addDaysIso(todayIso(), 3);
+      pendingFollowUpDate = val;
+      if(followUpDateInput) followUpDateInput.value = val;
+    });
+  }
+
   /* commit the pending selection as one new call-log entry, then clear it so
      the panel is ready for the next call to this business */
   const logCallBtn = document.getElementById('logCallBtn');
@@ -3578,11 +3626,16 @@ function wireOutputEvents(approaches, d){
       // Push the resulting status straight onto the lead document in Firestore.
       // The Client Hub picks it up through its own live subscription, so this
       // works whether or not the Hub is open — no window.opener needed.
+      // The date field is only rendered for non-terminal outcomes, so a
+      // terminal pick (Not Interested) naturally passes no explicit date and
+      // followUpFieldsForCall ignores it either way.
       if(d.leadFinderId){
-        pushStatusToClientHub(d.leadFinderId, outcomes);
+        const explicitDate = followUpDateInput ? followUpDateInput.value : pendingFollowUpDate;
+        pushStatusToClientHub(d.leadFinderId, outcomes, explicitDate);
       }
       pendingOutcomes = [];
       pendingNotes = '';
+      pendingFollowUpDate = null;
       showToast('Call logged');
       render();
     });

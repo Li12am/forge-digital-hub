@@ -142,17 +142,26 @@ export function followUpLabel(dueIso) {
 /* The single source of truth for what a logged call writes onto a lead —
    used by BOTH the Script Generator's Log This Call panel and the Client
    Hub's quick-log buttons, so a call logged from either place produces an
-   identical document and lands in the same bucket. */
-export function followUpFieldsForCall(outcomes, days) {
+   identical document and lands in the same bucket.
+
+   explicitDueDate lets the caller override the computed default with the
+   exact date the person on the phone gave you — validated as a plain
+   YYYY-MM-DD string so a stray malformed value can never silently corrupt
+   the due date; anything that doesn't match falls back to the day-offset
+   default exactly as if nothing had been passed. Ignored entirely for a
+   terminal outcome, since those carry no follow-up date at all. */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export function followUpFieldsForCall(outcomes, days, explicitDueDate) {
   const status = statusFromOutcomes(outcomes);
   const terminal = isTerminalStatus(status);
+  const hasValidExplicitDate = !terminal && typeof explicitDueDate === 'string' && ISO_DATE_RE.test(explicitDueDate);
   return {
     status: status,
     lastCallAt: Date.now(),
     lastCallOutcomes: outcomes ? outcomes.slice() : [],
     archivedAt: terminal ? todayIso() : null,
     // A terminal outcome ends the sequence, so it carries no next due date.
-    followUpDueDate: terminal ? null : addDaysIso(todayIso(), days || FOLLOWUP_DEFAULT_DAYS)
+    followUpDueDate: terminal ? null : (hasValidExplicitDate ? explicitDueDate : addDaysIso(todayIso(), days || FOLLOWUP_DEFAULT_DAYS))
   };
 }
 

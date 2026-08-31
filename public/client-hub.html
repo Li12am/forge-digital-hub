@@ -445,6 +445,18 @@ button.tag-pill{font-family:inherit;font-size:11.5px;line-height:normal;cursor:p
 .fu-out-btn:hover{border-color:var(--purple);color:var(--purple-bright);background:rgba(139,47,224,0.12);transform:translateY(-1px);}
 .fu-out-btn.danger:hover{border-color:var(--red);color:#ff8fa3;background:rgba(255,93,122,0.12);}
 .fu-hint{font-size:11px;color:var(--text-faint);line-height:1.5;}
+.fu-out-btn.selected{
+  border-color:var(--purple);color:#fff;
+  background:linear-gradient(135deg,var(--purple),var(--purple-dim));
+  box-shadow:0 0 12px rgba(139,47,224,0.4);
+}
+.fu-date-confirm{display:flex;flex-direction:column;gap:6px;animation:fuFade .2s ease both;}
+.fu-date-label{font-size:11px;font-weight:700;color:var(--text-dim);}
+.fu-cancel-link{
+  align-self:flex-start;background:none;border:none;color:var(--text-faint);
+  font-size:11px;font-weight:600;cursor:pointer;padding:2px 4px;
+}
+.fu-cancel-link:hover{color:var(--text);}
 
 /* ---------------- Find New Leads (discovery) ---------------- */
 /* Location presets are split into Wide (statewide / metro) and Local groups so
@@ -1479,6 +1491,8 @@ let selectedSource = 'Nextdoor';
 let currentView = 'active';
 let syncState = 'connecting';   // connecting | live | offline | error
 let quickLogLeadId = null;      // lead whose inline outcome buttons are expanded
+let quickLogPendingOutcome = null; // non-terminal outcome staged for this lead, awaiting a date confirm
+let quickLogPendingDate = null;    // date typed/picked for that pending outcome (null = use the default)
 
 const leadsCol = collection(db, LEADS_COLLECTION);
 function leadRef(id) { return doc(db, LEADS_COLLECTION, id); }
@@ -1625,9 +1639,9 @@ async function applyStatus(lead, status) {
 
    Setting lastCallAt is what moves a lead out of Active — a terminal outcome
    sends it straight to History instead, and any other outcome schedules the
-   next follow-up N days out. */
-async function logCallOnLead(leadId, outcomes, days) {
-  const fields = followUpFieldsForCall(outcomes, days || FOLLOWUP_DEFAULT_DAYS);
+   next follow-up on `explicitDate` if one was picked, or N days out otherwise. */
+async function logCallOnLead(leadId, outcomes, days, explicitDate) {
+  const fields = followUpFieldsForCall(outcomes, days || FOLLOWUP_DEFAULT_DAYS, explicitDate);
   await patchLead(leadId, Object.assign({}, fields, { callCount: increment(1) }));
   return fields;
 }
@@ -3269,6 +3283,7 @@ const QUICK_OUTCOMES = [
   { key: 'send_portfolio', label: 'Sent Portfolio' },
   { key: 'call_later', label: 'Call Later' },
   { key: 'no_answer', label: 'No Answer' },
+  { key: 'hung_up', label: 'Hung Up' },
   { key: 'not_interested', label: 'Not Interested' }
 ];
 
@@ -3278,6 +3293,16 @@ function followUpBlockHtml(lead) {
   const called = lead.lastCallAt ? formatCallTimestamp(lead.lastCallAt) : '';
   const isOpen = quickLogLeadId === lead.id;
   const calls = lead.callCount || 1;
+
+  // Picking a non-terminal outcome doesn't commit immediately — it stages the
+  // outcome and reveals a date field so the exact date the person gave you
+  // can be entered before anything is written. Not Interested still commits
+  // on the first click, same as before: there's no date to pick for it.
+  const pendingOutcome = isOpen ? quickLogPendingOutcome : null;
+  const pendingIsTerminal = pendingOutcome ? isTerminalStatus(statusFromOutcomes([pendingOutcome])) : false;
+  const hintText = pendingOutcome
+    ? (pendingIsTerminal ? '' : `Pick the date they told you, or leave the default (+${FOLLOWUP_DEFAULT_DAYS} days).`)
+    : 'Pick an outcome to log this call. Not Interested moves it straight to History — anything else lets you set the next follow-up date.';
 
   return `
     <div class="fu-block">
@@ -3290,9 +3315,21 @@ function followUpBlockHtml(lead) {
       </div>
       ${isOpen ? `
         <div class="fu-outcomes">
-          ${QUICK_OUTCOMES.map(o => `<button type="button" class="fu-out-btn ${o.key === 'not_interested' ? 'danger' : ''}" data-action="quick-outcome" data-id="${escapeHtml(lead.id)}" data-outcome="${o.key}">${o.label}</button>`).join('')}
+          ${QUICK_OUTCOMES.map(o => `<button type="button" class="fu-out-btn ${o.key === 'not_interested' ? 'danger' : ''} ${pendingOutcome === o.key ? 'selected' : ''}" data-action="quick-outcome" data-id="${escapeHtml(lead.id)}" data-outcome="${o.key}">${o.label}</button>`).join('')}
         </div>
-        <p class="fu-hint">Picking an outcome logs the call now and reschedules ${FOLLOWUP_DEFAULT_DAYS} days out — except Not Interested, which moves this lead to History.</p>
+        ${pendingOutcome && !pendingIsTerminal ? `
+          <div class="fu-date-confirm">
+            <label class="fu-date-label">Follow up on</label>
+            <div class="fu-controls">
+              <input type="date" class="fu-date" id="quickLogDateInput" data-action="quick-log-date" value="${escapeHtml(quickLogPendingDate || addDaysIso(todayIso(), FOLLOWUP_DEFAULT_DAYS))}">
+              <button type="button" class="fu-btn" data-action="quick-log-shortcut" data-days="1">+1d</button>
+              <button type="button" class="fu-btn" data-action="quick-log-shortcut" data-days="3">+3d</button>
+              <button type="button" class="fu-btn primary" data-action="confirm-quick-outcome" data-id="${escapeHtml(lead.id)}">✓ Confirm</button>
+            </div>
+            <button type="button" class="fu-cancel-link" data-action="cancel-quick-outcome">✕ Cancel</button>
+          </div>
+        ` : ''}
+        ${hintText ? `<p class="fu-hint">${hintText}</p>` : ''}
       ` : `
         <div class="fu-controls">
           <button type="button" class="fu-btn primary" data-action="open-quick-log" data-id="${escapeHtml(lead.id)}">✓ Log Outcome</button>
@@ -3835,10 +3872,58 @@ function handleGridClick(e) {
 
   // --- Follow-up controls ---
   const openQuick = e.target.closest('[data-action="open-quick-log"]');
-  if (openQuick) { quickLogLeadId = openQuick.dataset.id; renderLeadsGrid(); return; }
+  if (openQuick) {
+    quickLogLeadId = openQuick.dataset.id;
+    quickLogPendingOutcome = null;
+    quickLogPendingDate = null;
+    renderLeadsGrid();
+    return;
+  }
 
+  // Terminal outcomes (Not Interested) have no date to pick, so they still
+  // commit on the first click exactly like before. Anything else is staged —
+  // it reveals the date field and waits for "Confirm" rather than writing
+  // immediately, which is the whole point of this feature.
   const outcomeBtn = e.target.closest('[data-action="quick-outcome"]');
-  if (outcomeBtn) { handleQuickOutcome(outcomeBtn.dataset.id, outcomeBtn.dataset.outcome); return; }
+  if (outcomeBtn) {
+    const outcome = outcomeBtn.dataset.outcome;
+    if (isTerminalStatus(statusFromOutcomes([outcome]))) {
+      handleQuickOutcome(outcomeBtn.dataset.id, outcome);
+    } else {
+      quickLogPendingOutcome = outcome;   // quickLogPendingDate deliberately untouched —
+      renderLeadsGrid();                  // switching between two non-terminal outcomes keeps any date already picked
+    }
+    return;
+  }
+
+  const confirmBtn = e.target.closest('[data-action="confirm-quick-outcome"]');
+  if (confirmBtn) {
+    if (!quickLogPendingOutcome) return;
+    const dateInput = document.getElementById('quickLogDateInput');
+    const explicitDate = quickLogPendingDate || (dateInput ? dateInput.value : null);
+    handleQuickOutcome(confirmBtn.dataset.id, quickLogPendingOutcome, explicitDate);
+    return;
+  }
+
+  const cancelQuickBtn = e.target.closest('[data-action="cancel-quick-outcome"]');
+  if (cancelQuickBtn) {
+    quickLogPendingOutcome = null;
+    quickLogPendingDate = null;
+    renderLeadsGrid();
+    return;
+  }
+
+  // +1d / +3d while a date is showing — sets the input directly (no re-render,
+  // so there's no flicker) and mirrors the value into state so it survives if
+  // something else re-renders the grid first (e.g. the periodic label refresh).
+  const shortcutBtn = e.target.closest('[data-action="quick-log-shortcut"]');
+  if (shortcutBtn) {
+    const val = addDaysIso(todayIso(), Number(shortcutBtn.dataset.days) || 1);
+    quickLogPendingDate = val;
+    const input = document.getElementById('quickLogDateInput');
+    if (input) input.value = val;
+    return;
+  }
 
   const snoozeBtn = e.target.closest('[data-action="snooze"]');
   if (snoozeBtn) {
@@ -3860,16 +3945,20 @@ function handleGridClick(e) {
       .catch(err => { console.error('Failed to delete lead', err); showToast('Could not delete that lead.', 'error'); });
   }
 }
-
 /* Logs the next outcome straight from a follow-up card. A terminal outcome
-   retires the lead to History; anything else keeps it in Follow-ups with a
-   fresh date, which is exactly the "second outcome decides" behaviour. */
-async function handleQuickOutcome(leadId, outcome) {
+   retires the lead to History immediately (no date to pick, so it commits on
+   the first click). Anything else is staged as quickLogPendingOutcome by the
+   click handler below and only reaches this function once "Confirm" is
+   clicked, at which point explicitDate carries whatever was in the date
+   field — the exact date the person gave you, or the default if left alone. */
+async function handleQuickOutcome(leadId, outcome, explicitDate) {
   const lead = findLeadById(leadId);
   if (!lead) return;
   quickLogLeadId = null;
+  quickLogPendingOutcome = null;
+  quickLogPendingDate = null;
   try {
-    const fields = await logCallOnLead(leadId, [outcome], FOLLOWUP_DEFAULT_DAYS);
+    const fields = await logCallOnLead(leadId, [outcome], FOLLOWUP_DEFAULT_DAYS, explicitDate);
     if (isTerminalStatus(fields.status)) {
       showToast(`"${lead.businessName}" marked ${fields.status} — moved to History.`);
     } else {
@@ -3890,6 +3979,13 @@ async function handleGridChange(e) {
     setFollowUpDate(dateInput.dataset.id, dateInput.value)
       .then(() => showToast('Follow-up date updated.'))
       .catch(err => { console.error('Failed to set date', err); showToast('Could not set that date.', 'error'); });
+    return;
+  }
+  // The date field in the outcome-confirm row -- just remember the picked
+  // value; nothing is written until "Confirm" is clicked.
+  const quickDateInput = e.target.closest('[data-action="quick-log-date"]');
+  if (quickDateInput) {
+    quickLogPendingDate = quickDateInput.value;
     return;
   }
   await handleStatusSelectChange(e);
@@ -3922,6 +4018,8 @@ function switchView(view) {
   if (view === currentView) return;
   currentView = view;
   quickLogLeadId = null;   // don't carry an open outcome picker across views
+  quickLogPendingOutcome = null;
+  quickLogPendingDate = null;
   updateViewToggleUI();
   renderAll();
 }
