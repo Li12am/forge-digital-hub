@@ -42,7 +42,7 @@ service cloud.firestore {
       allow read, write: if isApproved();
     }
 
-    /* Private settings — notably the Apify API token.
+    /* Private settings — notably the Outscraper API key.
        This is why the token is NOT hardcoded into the site's JavaScript:
        Firebase Hosting serves every file under public/ to anyone on the
        internet (the sign-in gate is client-side JS that runs only AFTER the

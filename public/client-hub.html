@@ -743,7 +743,7 @@ footer.foot{text-align:center;color:var(--text-faint);font-size:12px;margin-top:
   </div>
 </div>
 
-<!-- FIND NEW LEADS (Apify discovery) MODAL -->
+<!-- FIND NEW LEADS (Outscraper discovery) MODAL -->
 <div id="discoverModal" class="modal-overlay hidden">
   <div class="modal-card">
     <div id="discoverModalContent"></div>
@@ -2135,11 +2135,16 @@ function renderImportModal() {
 }
 
 /* ============================================================
-   FIND NEW LEADS — Apify Google Maps discovery
+   FIND NEW LEADS — Outscraper Google Maps discovery
    ------------------------------------------------------------
-   Runs the Apify Google Maps scraper, filters the results down to
-   businesses worth calling, and puts them in front of you one at a
-   time to Approve or Decline.
+   Runs a Google Maps search through Outscraper, filters the results
+   down to businesses worth calling, and puts them in front of you one
+   at a time to Approve or Decline.
+
+   Outscraper's async=false mode holds the HTTP connection open and
+   returns results in the SAME response — unlike the earlier Apify
+   integration this replaces, there is no run-id polling loop. One
+   request, one answer.
 
    WHERE THE TOKEN LIVES — and why it is not in this file:
    Firebase Hosting serves everything under public/ to anyone on the
@@ -2147,12 +2152,11 @@ function renderImportModal() {
    only runs AFTER a file has been downloaded, so it does not protect
    the file itself — a token pasted into this source would be readable
    by anyone who fetched the .html. Instead the token is stored in the
-   Firestore document config/apify, which IS protected server-side by
-   firestore.rules (approved emails only), and is fetched at runtime.
+   Firestore document config/outscraper, which IS protected server-side
+   by firestore.rules (approved emails only), and is fetched at runtime.
    ============================================================ */
 const DECISIONS_COLLECTION = 'leadDecisions';
-const APIFY_ACTOR = 'compass~crawler-google-places';
-const APIFY_BASE = 'https://api.apify.com/v2';
+const OUTSCRAPER_BASE = 'https://api.outscraper.com';
 
 // Search terms sent to Google Maps, mapped onto our own business types.
 /* `gap` = how likely this trade is to be running without a real website.
@@ -2194,13 +2198,24 @@ function categoryGapFor(businessType, searchTerm) {
   const byType = DISCOVERY_CATEGORIES.find(c => c.type === businessType);
   return byType ? byType.gap : 'med';
 }
+// Outscraper echoes back the exact query string it searched on (item.query),
+// which is "<category> <location>" or just "<category>" when location was
+// left blank — not one of our bare category terms. This finds which selected
+// category a result actually belongs to by substring match, so scoring and
+// notes still attribute it correctly either way.
+function matchCategoryTerm(rawQuery, categories) {
+  const q = (rawQuery || '').toLowerCase();
+  const hit = categories.find(term => q.indexOf(term.toLowerCase()) !== -1);
+  return hit || categories[0] || '';
+}
 
 // Defaults are now the high-gap trades only — the ones most likely to be
 // running with no real website at all.
 const DEFAULT_DISCOVERY_CATEGORIES = ['pressure washing', 'junk removal', 'handyman', 'landscaping', 'tree service'];
 
 /* Tight, Bucks-County-first presets rather than "PA" broadly. Ordered core
-   territory outward; the free-text box stays editable for anywhere else. */
+   territory outward; the free-text box stays editable for anywhere else —
+   and, per your request, entirely skippable too (see the Location field). */
 const LOCATION_PRESET_GROUPS = [
   {
     label: 'Wide',
@@ -2221,19 +2236,29 @@ const LOCATION_PRESET_GROUPS = [
 const LOCATION_PRESETS = LOCATION_PRESET_GROUPS.reduce((all, g) => all.concat(g.items), []);
 const DEFAULT_DISCOVERY_LOCATION = 'Feasterville-Trevose, PA';
 
-/* How aggressively low-opportunity candidates are thrown away before review.
-   The user's stated preference is explicit: fewer leads that are actually
-   worth calling, over a long queue of maybes. `strict` is the default. */
-const QUALITY_BARS = {
-  strict:   { label: 'Strict', minScore: 60, allowRealWebsite: false, hint: 'No-website / Facebook-only / DIY-page businesses only. Highest bar.' },
-  /* Floor is 35, not 40, on purpose: a business with a real website tops out
-     around 46 points (it scores zero on the 50-point presence component), so a
-     40 floor would have quietly excluded almost all of them and made this
-     tier's "also allows real websites" label a lie. */
-  balanced: { label: 'Balanced', minScore: 35, allowRealWebsite: true, hint: 'Also allows businesses that already have a real website, ranked last.' },
-  everything: { label: 'Everything', minScore: 0, allowRealWebsite: true, hint: 'No quality floor — shows every result that clears the hard filters.' }
-};
-const DEFAULT_QUALITY_BAR = 'strict';
+/* Presence-type checkboxes — replaces the old three-tier Strict/Balanced/
+   Everything "quality bar" with something more literal: exactly which kinds
+   of online presence count as a match, checked or not. A business is kept
+   only if its presenceTypeFor() bucket is one of the checked types; there is
+   no separate score floor any more. The opportunity score below still runs
+   on every survivor, but purely to ORDER the queue, not to gate it. */
+const PRESENCE_TYPES = [
+  { key: 'none', label: 'No website or social presence at all' },
+  { key: 'facebook', label: 'Facebook page only' },
+  { key: 'social', label: 'Instagram or Nextdoor only' },
+  { key: 'diy', label: 'DIY / auto-generated website only' },
+  { key: 'real', label: 'Has a real custom website' }
+];
+// 'real' is off by default -- everything else on, matching "no websites... or
+// Facebook... websites" from how this was described.
+const DEFAULT_PRESENCE_TYPES = ['none', 'facebook', 'social', 'diy'];
+function presenceTypeFor(c) {
+  if (c.hasWebsite) return 'real';
+  if (c.weakSiteUrl) return 'diy';
+  if (c.facebookUrl) return 'facebook';
+  if (c.instagramUrl || c.nextdoorUrl) return 'social';
+  return 'none';
+}
 
 let discoverState = null;
 let leadDecisions = [];   // live mirror of the decisions collection
@@ -2246,12 +2271,12 @@ function startDecisionsSync() {
   }, (err) => console.error('Decision sync failed', err));
 }
 
-// Stable identity for a scraped business. Apify's placeId is best; the
+// Stable identity for a scraped business. Outscraper's place_id is best; the
 // normalised name+city fallback keeps things working if it's ever missing.
 function placeKeyFor(item) {
-  const pid = item.placeId || item.place_id || item.fid || item.cid;
+  const pid = item.place_id || item.placeId || item.fid || item.cid;
   if (pid) return 'pid:' + pid;
-  return 'nm:' + normalizeNameKey(item.title || item.name || item.businessName || '') + '|' + normalizeNameKey(item.city || '');
+  return 'nm:' + normalizeNameKey(item.name || item.title || item.businessName || '') + '|' + normalizeNameKey(item.city || '');
 }
 
 function decisionFor(placeKey) {
@@ -2268,13 +2293,14 @@ function categoryDeclineRate(type) {
   return forType.filter(d => d.decision === 'declined').length / forType.length;
 }
 
-/* Converts one Apify Google Maps record into our lead shape, reusing the very
-   same website/city/type helpers the CSV importer uses so a discovered lead is
+/* Converts one Google Maps record into our lead shape, reusing the very same
+   website/city/type helpers the CSV importer uses so a discovered lead is
    indistinguishable from an imported or hand-entered one. */
-/* Field names below carry fallbacks on purpose. Apify actors change their
-   output schema between versions, and a single renamed key would otherwise
-   produce a queue of blank-looking businesses with no obvious cause. Picking
-   the first non-empty of several plausible names fails soft instead. */
+/* Field names below carry fallbacks on purpose — Outscraper's own field names
+   (name, site, full_address, us_state, reviews, place_id, ...) sit alongside
+   the earlier Apify-shaped names so nothing needed to be thrown away, and any
+   future provider swap fails soft the same way rather than producing a queue
+   of blank-looking businesses with no obvious cause. */
 function pickField(item, names) {
   for (const n of names) {
     const v = item[n];
@@ -2312,8 +2338,8 @@ function deriveOwnerFromBusinessName(businessName) {
 }
 
 /* Walks the WHOLE scraped record for social links rather than only reading the
-   website column. Maps records carry social URLs in several places depending on
-   actor version (a `facebooks` array, an `additionalInfo` blob, or simply the
+   website column. Maps records carry social URLs in several places depending
+   on provider (a `facebooks` array, an `additionalInfo` blob, or simply the
    website field pointing at a Facebook page), and a Facebook-only business is
    exactly the profile worth calling — so it must not be missed. */
 function harvestSocialUrls(item) {
@@ -2346,7 +2372,7 @@ function harvestSocialUrls(item) {
    it and you have something specific to critique on the call. */
 function qualifyOnlinePresence(item) {
   const social = harvestSocialUrls(item);
-  const rawSite = String(pickField(item, ['website', 'websiteUrl', 'url_website', 'site'])).trim();
+  const rawSite = String(pickField(item, ['site', 'website', 'websiteUrl', 'url_website'])).trim();
   const base = {
     hasWebsite: false, websiteUrl: '', weakSiteUrl: '',
     facebookUrl: social.facebookUrl, instagramUrl: social.instagramUrl,
@@ -2417,20 +2443,21 @@ function isUsPhoneNumber(phone) {
 // Requires POSITIVE evidence of Pennsylvania — a structured state field
 // reading "PA"/"Pennsylvania", or that pattern showing up in the address
 // text. No evidence at all (blank address, no state field) fails closed
-// rather than being assumed local.
+// rather than being assumed local. Applies even when the Location field was
+// left blank — an open-ended search still only surfaces PA businesses.
 const PA_ADDRESS_RE = /\bpennsylvania\b|,\s*pa\b|\bpa\s+\d{5}(-\d{4})?\b/i;
 function isPennsylvaniaLocation(item, address) {
-  const state = String(pickField(item, ['state', 'stateCode', 'province'])).trim();
+  const state = String(pickField(item, ['us_state', 'state', 'stateCode', 'province'])).trim();
   if (state) return /^pa$/i.test(state) || /^pennsylvania$/i.test(state);
-  const countryCode = String(pickField(item, ['countryCode', 'country'])).trim().toUpperCase();
+  const countryCode = String(pickField(item, ['countryCode', 'country', 'country_code'])).trim().toUpperCase();
   if (countryCode && countryCode !== 'US' && countryCode !== 'USA') return false;
   if (!address) return false;
   return PA_ADDRESS_RE.test(address);
 }
 
-function apifyItemToCandidate(item, searchTerm) {
+function mapsItemToCandidate(item, searchTerm) {
   const cat = DISCOVERY_CATEGORIES.find(c => c.term === searchTerm);
-  const address = String(pickField(item, ['address', 'fullAddress', 'formattedAddress', 'street'])).trim();
+  const address = String(pickField(item, ['full_address', 'address', 'fullAddress', 'formattedAddress', 'street'])).trim();
   const rawCity = String(pickField(item, ['city', 'town', 'locality'])).trim();
   const cityInfo = rawCity
     ? (PRIMARY_TOWNS.includes(rawCity) ? { city: rawCity, tier: 'primary' }
@@ -2438,11 +2465,11 @@ function apifyItemToCandidate(item, searchTerm) {
       : { city: rawCity, tier: '' })
     : cityFromAddress(address);
   const webInfo = qualifyOnlinePresence(item);
-  const categoryName = String(pickField(item, ['categoryName', 'category', 'categories']));
+  const categoryName = String(pickField(item, ['category', 'categoryName', 'categories']));
   const typeFromCat = categoryName ? extractBusinessType(categoryName.toLowerCase()) : '';
   const businessType = typeFromCat || (cat && cat.type) || FALLBACK_TYPE;
-  const rating = pickField(item, ['totalScore', 'rating', 'stars']);
-  const reviews = Number(pickField(item, ['reviewsCount', 'reviewsCounts', 'userRatingCount'])) || 0;
+  const rating = pickField(item, ['rating', 'totalScore', 'stars']);
+  const reviews = Number(pickField(item, ['reviews', 'reviewsCount', 'reviewsCounts', 'userRatingCount'])) || 0;
 
   const presenceNote = webInfo.siteQuality === 'real' ? 'Has a real website.'
     : webInfo.weakSiteUrl ? ('Only a DIY/auto-generated page: ' + webInfo.weakSiteUrl)
@@ -2458,7 +2485,7 @@ function apifyItemToCandidate(item, searchTerm) {
     'Found via Google Maps search for "' + searchTerm + '".'
   ].filter(Boolean).join(' ');
 
-  const businessName = String(pickField(item, ['title', 'name', 'businessName'])).trim();
+  const businessName = String(pickField(item, ['name', 'title', 'businessName'])).trim();
 
   return Object.assign({
     businessName: businessName,
@@ -2476,7 +2503,7 @@ function apifyItemToCandidate(item, searchTerm) {
     _searchTerm: searchTerm,
     _rating: rating || null,
     _reviews: reviews,
-    _mapsUrl: String(pickField(item, ['url', 'placeUrl', 'googleMapsUrl'])),
+    _mapsUrl: String(pickField(item, ['location_link', 'url', 'placeUrl', 'googleMapsUrl'])),
     _address: address,
     _isUsPhone: isUsPhoneNumber(String(pickField(item, ['phone', 'phoneUnformatted', 'phoneNumber'])).trim()),
     _isPennsylvania: isPennsylvaniaLocation(item, address)
@@ -2486,11 +2513,8 @@ function apifyItemToCandidate(item, searchTerm) {
 /* OPPORTUNITY SCORE — 0-100, four weighted components plus a learned penalty.
    Returns the breakdown as well as the total so the review card can show you
    exactly why something ranked where it did, rather than an opaque number.
-
-   The weighting reflects one belief: the pitch is "you have no real website",
-   so the size of that gap is worth more than everything else combined. A
-   business that already has a proper site scores zero on the dominant
-   component and, under the default Strict bar, is dropped entirely. */
+   Used purely to ORDER the queue now — the presence-type checkboxes above
+   are what decide whether a candidate is shown at all. */
 function opportunityBreakdown(c) {
   const parts = [];
 
@@ -2555,74 +2579,69 @@ function opportunityBreakdown(c) {
 
 function scoreCandidate(c) { return opportunityBreakdown(c).score; }
 
-/* ---------------- Apify API ---------------- */
-async function apifyFetch(path, token, options) {
-  const sep = path.indexOf('?') === -1 ? '?' : '&';
-  const res = await fetch(APIFY_BASE + path + sep + 'token=' + encodeURIComponent(token), options || {});
+/* ---------------- Outscraper API ---------------- */
+/* Synchronous by design (async=false) — Outscraper holds the connection open
+   and returns results in this same call, so there is no run/poll cycle here
+   at all. `query` is sent once per selected category (repeated params);
+   Outscraper documents `limit` as applying PER query, so this reproduces the
+   old "results per category" behaviour exactly in a single request. */
+async function runOutscraperSearch(token, categories, location, perCategory, onProgress) {
+  onProgress('Searching Google Maps…');
+  const loc = (location || '').trim();
+  const params = new URLSearchParams();
+  categories.forEach(term => params.append('query', loc ? `${term} ${loc}` : term));
+  params.set('limit', String(perCategory));
+  params.set('async', 'false');
+  params.set('dropDuplicates', 'true');
+
+  const res = await fetch(OUTSCRAPER_BASE + '/google-maps-search?' + params.toString(), {
+    method: 'GET',
+    headers: { 'X-API-KEY': token }
+  });
   if (!res.ok) {
     let detail = '';
-    try { const j = await res.json(); detail = (j.error && j.error.message) || ''; } catch (e) {}
-    const err = new Error(detail || ('Apify returned HTTP ' + res.status));
+    try { const j = await res.json(); detail = j.errorMessage || j.message || (j.error && j.error.message) || ''; } catch (e) {}
+    const err = new Error(detail || ('Outscraper returned HTTP ' + res.status));
     err.status = res.status;
     throw err;
   }
-  return res.json();
+  onProgress('Fetching results…');
+  const payload = await res.json();
+  return normalizeOutscraperResults(payload);
 }
 
-/* Started asynchronously and polled rather than using Apify's run-sync
-   endpoint: a Maps scrape routinely runs past a minute, and polling both
-   dodges the sync endpoint's timeout and lets the UI report real progress. */
-async function runDiscovery(token, searchTerms, location, perTerm, onProgress) {
-  onProgress('Starting the Google Maps scraper…');
-  const run = await apifyFetch('/acts/' + APIFY_ACTOR + '/runs', token, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      searchStringsArray: searchTerms,
-      locationQuery: location,
-      maxCrawledPlacesPerSearch: perTerm,
-      language: 'en',
-      skipClosedPlaces: true
-    })
-  });
-
-  const runId = run.data.id;
-  const datasetId = run.data.defaultDatasetId;
-  const startedAt = Date.now();
-  const TIMEOUT_MS = 5 * 60 * 1000;
-
-  while (true) {
-    if (discoverState && discoverState.cancelled) throw new Error('cancelled');
-    await new Promise(r => setTimeout(r, 3000));
-    if (Date.now() - startedAt > TIMEOUT_MS) {
-      throw new Error('The scrape took longer than 5 minutes. It may still finish — check your Apify console.');
-    }
-    const info = await apifyFetch('/actor-runs/' + runId, token);
-    const status = info.data.status;
-    onProgress('Scraping Google Maps… (' + status.toLowerCase() + ')');
-    if (status === 'SUCCEEDED') break;
-    if (['FAILED', 'ABORTED', 'TIMED-OUT'].includes(status)) {
-      throw new Error('The Apify run ' + status.toLowerCase() + '. Check the run log in your Apify console.');
-    }
+/* The exact response shape for a multi-query async=false request isn't
+   something that could be confirmed without a live key to test against, so
+   this accepts several plausible shapes rather than assuming one: a flat
+   array of businesses, an array of arrays (one sub-array per query — the
+   shape Outscraper's docs describe for multi-query batches), or either of
+   those wrapped in a `{ data: ... }` envelope. */
+function normalizeOutscraperResults(payload) {
+  let arr = payload;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload) && Array.isArray(payload.data)) {
+    arr = payload.data;
   }
-
-  onProgress('Fetching results…');
-  const items = await apifyFetch('/datasets/' + datasetId + '/items?clean=true&format=json', token);
-  return Array.isArray(items) ? items : [];
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  arr.forEach(item => {
+    if (Array.isArray(item)) out.push(...item);
+    else if (item && typeof item === 'object') out.push(item);
+  });
+  return out;
 }
 
 /* ---------------- Token storage ---------------- */
-async function loadApifyToken() {
+async function loadOutscraperToken() {
   try {
-    const snap = await getDoc(doc(db, 'config', 'apify'));
+    const snap = await getDoc(doc(db, 'config', 'outscraper'));
     return snap.exists() ? (snap.data().token || '') : '';
   } catch (e) {
-    console.error('Could not read Apify config', e);
+    console.error('Could not read Outscraper config', e);
     return '';
   }
 }
-async function saveApifyToken(token) {
-  await setDoc(doc(db, 'config', 'apify'), {
+async function saveOutscraperToken(token) {
+  await setDoc(doc(db, 'config', 'outscraper'), {
     token: token,
     updatedBy: (currentUser() && currentUser().email) || null,
     updatedAt: serverTimestamp()
@@ -2644,7 +2663,7 @@ async function recordDecision(candidate, decision) {
     searchTerm: candidate._searchTerm,
     rating: candidate._rating,
     reviews: candidate._reviews,
-    source: 'apify-google-maps',
+    source: 'outscraper-google-maps',
     decidedBy: (currentUser() && currentUser().email) || null,
     decidedAt: Date.now()
   }));
@@ -2658,7 +2677,7 @@ function openDiscoverModal() {
     tokenKnown: false,
     categories: DEFAULT_DISCOVERY_CATEGORIES.slice(),
     location: DEFAULT_DISCOVERY_LOCATION,
-    qualityBar: DEFAULT_QUALITY_BAR,
+    presenceTypes: DEFAULT_PRESENCE_TYPES.slice(),
     perTerm: 5,
     progress: '',
     error: '',
@@ -2674,7 +2693,7 @@ function openDiscoverModal() {
   document.getElementById('discoverModal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
 
-  loadApifyToken().then(tok => {
+  loadOutscraperToken().then(tok => {
     if (!discoverState) return;
     discoverState.token = tok;
     discoverState.tokenKnown = true;
@@ -2689,24 +2708,27 @@ function closeDiscoverModal() {
 }
 
 async function handleSaveToken() {
-  const input = document.getElementById('apifyTokenInput');
+  const input = document.getElementById('outscraperTokenInput');
   const val = (input.value || '').trim();
-  if (!val) { showToast('Paste your Apify token first.', 'error'); return; }
+  if (!val) { showToast('Paste your Outscraper API key first.', 'error'); return; }
   try {
-    await saveApifyToken(val);
+    await saveOutscraperToken(val);
     discoverState.token = val;
-    showToast('Apify token saved to your private workspace settings.');
+    showToast('Outscraper API key saved to your private workspace settings.');
     renderDiscoverModal();
   } catch (err) {
     console.error('Failed to save token', err);
-    showToast('Could not save the token — check your Firestore rules are deployed.', 'error');
+    showToast('Could not save the key — check your Firestore rules are deployed.', 'error');
   }
 }
 
 async function startDiscoveryRun() {
   const s = discoverState;
   if (!s.categories.length) { showToast('Pick at least one category.', 'error'); return; }
-  if (!s.location.trim()) { showToast('Enter a location.', 'error'); return; }
+  if (!s.presenceTypes.length) { showToast('Pick at least one presence type to match on.', 'error'); return; }
+  // Location is deliberately NOT required — an empty location just searches
+  // each category with no place appended, and the Pennsylvania hard filter
+  // still applies afterward regardless.
 
   s.stage = 'running';
   s.error = '';
@@ -2718,7 +2740,7 @@ async function startDiscoveryRun() {
   }, 1000);
 
   try {
-    const items = await runDiscovery(s.token, s.categories, s.location.trim(), s.perTerm, (msg) => {
+    const items = await runOutscraperSearch(s.token, s.categories, s.location.trim(), s.perTerm, (msg) => {
       if (!discoverState) return;
       s.progress = msg;
       const p = document.getElementById('discProgressMsg');
@@ -2736,12 +2758,10 @@ async function startDiscoveryRun() {
     let foreignPhoneCount = 0;
     let outsidePaCount = 0;
     let noOwnerCount = 0;
-    let lowScoreCount = 0;
-    let hasRealSiteCount = 0;
-    const bar = QUALITY_BARS[s.qualityBar] || QUALITY_BARS[DEFAULT_QUALITY_BAR];
+    let presenceFilteredCount = 0;
     items.forEach(item => {
-      const term = item.searchString || item.searchQuery || item.searchTerm || s.categories[0];
-      const c = apifyItemToCandidate(item, term);
+      const term = matchCategoryTerm(item.query || item.searchString || item.searchQuery || item.searchTerm, s.categories);
+      const c = mapsItemToCandidate(item, term);
 
       /* HARD FILTERS — applied before anything reaches the review queue.
          Owner name is deliberately NOT one of these: Google Maps doesn't
@@ -2756,7 +2776,8 @@ async function startDiscoveryRun() {
       //    separate, stricter check on top of the length check above.
       if (!c._isUsPhone) { filteredOut++; foreignPhoneCount++; return; }
       // 4. must be positively confirmed as Pennsylvania — no address/state at
-      //    all is rejected rather than assumed local.
+      //    all is rejected rather than assumed local. Applies even with the
+      //    Location field left blank.
       if (!c._isPennsylvania) { filteredOut++; outsidePaCount++; return; }
       if (seen.has(c._placeKey)) { filteredOut++; return; }                   // dupe inside this batch
       seen.add(c._placeKey);
@@ -2764,24 +2785,24 @@ async function startDiscoveryRun() {
       if (decisionFor(c._placeKey)) { filteredOut++; return; }                // already judged before
       if (findDuplicateMatches(c.businessName, c.phone, null).length) { filteredOut++; return; } // already a lead
 
-      /* QUALITY BAR — the "fewer leads that are actually worth calling" rule.
-         Low-opportunity candidates are dropped here rather than merely ranked
-         low, because a long tail of maybes at the bottom of the queue still
-         costs review time. Both parts are user-adjustable via the bar setting. */
-      if (!bar.allowRealWebsite && c.siteQuality === 'real') { filteredOut++; hasRealSiteCount++; return; }
+      // 5. PRESENCE-TYPE CHECKBOXES — the "what do you want to fetch" filter.
+      //    A candidate is kept only if its online-presence bucket is one of
+      //    the checked types; everything else is discarded before review.
+      if (!s.presenceTypes.includes(presenceTypeFor(c))) { filteredOut++; presenceFilteredCount++; return; }
+
       const brk = opportunityBreakdown(c);
-      if (brk.score < bar.minScore) { filteredOut++; lowScoreCount++; return; }
       c._score = brk.score;
       c._scoreParts = brk.parts;
       candidates.push(c);
     });
 
-    /* If Apify returned rows but not one of them yielded a business name, the
-       actor's output schema has almost certainly changed — say so plainly
-       rather than reporting a misleading "no new candidates". */
+    /* If Outscraper returned rows but not one of them yielded a business
+       name, the response schema has almost certainly changed from what this
+       code expects — say so plainly rather than reporting a misleading
+       "no new candidates". */
     if (items.length && noNameCount === items.length) {
-      console.error('Apify returned records but none had a recognisable name field. Sample record:', items[0]);
-      s.error = `Apify returned ${items.length} result${items.length === 1 ? '' : 's'}, but none had a readable business name — the scraper's output format has likely changed. The first record has been logged to the browser console (F12) so the field names can be checked.`;
+      console.error('Outscraper returned records but none had a recognisable name field. Sample record:', items[0]);
+      s.error = `Outscraper returned ${items.length} result${items.length === 1 ? '' : 's'}, but none had a readable business name — the response format may not match what this page expects. The first record has been logged to the browser console (F12) so the field names can be checked.`;
       s.stage = 'setup';
       renderDiscoverModal();
       return;
@@ -2794,8 +2815,7 @@ async function startDiscoveryRun() {
     s.noPhoneCount = noPhoneCount;
     s.foreignPhoneCount = foreignPhoneCount;
     s.outsidePaCount = outsidePaCount;
-    s.lowScoreCount = lowScoreCount;
-    s.hasRealSiteCount = hasRealSiteCount;
+    s.presenceFilteredCount = presenceFilteredCount;
     s.scannedCount = items.length;
     s.index = 0;
     s.stage = candidates.length ? 'review' : 'done';
@@ -2804,9 +2824,9 @@ async function startDiscoveryRun() {
     clearInterval(tick);
     if (!discoverState || err.message === 'cancelled') return;
     console.error('Discovery run failed', err);
-    s.error = err.status === 401
-      ? 'Apify rejected the token. Check it is correct and still active.'
-      : (err.message || 'Something went wrong talking to Apify.');
+    s.error = err.status === 401 || err.status === 403
+      ? 'Outscraper rejected the API key. Check it is correct and still active.'
+      : (err.message || 'Something went wrong talking to Outscraper.');
     s.stage = 'setup';
     renderDiscoverModal();
   }
@@ -2849,23 +2869,23 @@ function discoverSetupHtml() {
     return `<div class="modal-head"><div><h2>Find New Leads</h2></div>
       <button type="button" data-action="close-discover" class="modal-close">×</button></div>
       <div class="modal-body"><div class="disc-progress"><div class="mini-spinner"></div>
-      <p>Checking your Apify connection…</p></div></div>`;
+      <p>Checking your Outscraper connection…</p></div></div>`;
   }
 
   if (!s.token) {
     return `
       <div class="modal-head">
-        <div><h2>Connect Apify</h2><div class="msub">One-time setup — needed before we can search.</div></div>
+        <div><h2>Connect Outscraper</h2><div class="msub">One-time setup — needed before we can search.</div></div>
         <button type="button" data-action="close-discover" class="modal-close">×</button>
       </div>
       <div class="modal-body">
         <div class="field">
-          <label>Apify API token</label>
-          <input type="password" id="apifyTokenInput" placeholder="apify_api_…" autocomplete="off">
-          <p class="field-note">Find it in Apify → Settings → Integrations → Personal API tokens.</p>
+          <label>Outscraper API key</label>
+          <input type="password" id="outscraperTokenInput" placeholder="Paste your Outscraper API key" autocomplete="off">
+          <p class="field-note">Find it in your Outscraper account under Profile → API Token.</p>
         </div>
         <div class="warn-note">
-          <strong>Where this gets stored:</strong> in the private <code>config/apify</code> document in your
+          <strong>Where this gets stored:</strong> in the private <code>config/outscraper</code> document in your
           Firestore database — readable only by your two approved Google accounts. It is deliberately
           <strong>not</strong> written into the website's files, because Firebase Hosting serves those to
           anyone on the internet; the sign-in screen only guards what's drawn on the page, not the files
@@ -2886,11 +2906,11 @@ function discoverSetupHtml() {
     </div>
     <div class="modal-body">
       ${s.error ? `<div class="dup-warning" style="margin-top:0;margin-bottom:14px;"><strong>⚠ ${escapeHtml(s.error)}</strong></div>` : ''}
-      <div class="import-step-title">Quality bar</div>
+      <div class="import-step-title">What counts as a match</div>
       <div class="chip-grid">
-        ${Object.keys(QUALITY_BARS).map(k => `<button type="button" class="cat-chip ${s.qualityBar === k ? 'on' : ''}" data-action="set-bar" data-bar="${k}">${escapeHtml(QUALITY_BARS[k].label)}</button>`).join('')}
+        ${PRESENCE_TYPES.map(p => `<button type="button" class="cat-chip ${s.presenceTypes.includes(p.key) ? 'on' : ''}" data-action="toggle-presence" data-presence="${p.key}">${s.presenceTypes.includes(p.key) ? '☑' : '☐'} ${escapeHtml(p.label)}</button>`).join('')}
       </div>
-      <p class="field-note" style="margin-top:7px;">${escapeHtml((QUALITY_BARS[s.qualityBar] || QUALITY_BARS[DEFAULT_QUALITY_BAR]).hint)}</p>
+      <p class="field-note" style="margin-top:7px;">A business is only shown if it matches one of the checked types. Phone number and a confirmed Pennsylvania address are always required regardless.</p>
 
       <div class="import-step-title" style="margin-top:18px;">Categories <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-faint);">— ★ = trades that rarely have a website</span></div>
       <div class="chip-grid">
@@ -2900,7 +2920,7 @@ function discoverSetupHtml() {
         <button type="button" class="regen-link" data-action="reset-cats">↻ Reset to recommended</button>
       </p>
 
-      <div class="import-step-title" style="margin-top:18px;">Location</div>
+      <div class="import-step-title" style="margin-top:18px;">Location <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-faint);">— optional</span></div>
       ${LOCATION_PRESET_GROUPS.map(g => `
         <div class="loc-group">
           <div class="loc-group-label">${escapeHtml(g.label)}</div>
@@ -2909,45 +2929,47 @@ function discoverSetupHtml() {
           </div>
           ${g.note ? `<p class="field-note" style="margin-top:6px;">${escapeHtml(g.note)}</p>` : ''}
         </div>`).join('')}
+      <div class="chip-grid" style="margin-top:6px;">
+        <button type="button" class="cat-chip ${!s.location.trim() ? 'on' : ''}" data-action="set-location" data-loc="">No location — search categories only</button>
+      </div>
 
       <div class="two-col" style="margin-top:14px;">
         <div class="field">
-          <label>Location <span class="opt">(or type any other)</span></label>
-          <input type="text" id="discLocation" value="${escapeHtml(s.location)}" placeholder="e.g. Feasterville-Trevose, PA">
-          <p class="field-note">Anywhere Google Maps understands — but non-PA results are dropped by the hard filter.</p>
+          <label>Location <span class="opt">(or leave blank)</span></label>
+          <input type="text" id="discLocation" value="${escapeHtml(s.location)}" placeholder="e.g. Feasterville-Trevose, PA — or leave blank">
+          <p class="field-note">Leaving this blank searches each category with no place attached — Google fills in a default area, and results are still filtered to Pennsylvania afterward either way.</p>
         </div>
         <div class="field">
           <label>Results per category</label>
           <select id="discPerTerm">
-            ${[3, 5, 10, 15, 20].map(n => `<option value="${n}" ${s.perTerm === n ? 'selected' : ''}>${n}</option>`).join('')}
+            ${[5, 10, 15, 20, 30, 50].map(n => `<option value="${n}" ${s.perTerm === n ? 'selected' : ''}>${n}</option>`).join('')}
           </select>
-          <p class="field-note">${s.categories.length} categor${s.categories.length === 1 ? 'y' : 'ies'} × ${s.perTerm} = up to <strong>${total}</strong> scraped.</p>
+          <p class="field-note">${s.categories.length} categor${s.categories.length === 1 ? 'y' : 'ies'} × ${s.perTerm} = up to <strong>${total}</strong> scraped. Start at 5 or 10 as a quick test.</p>
         </div>
       </div>
 
       <div class="run-note">
-        Every candidate is scored out of 100: <strong>online presence gap (50)</strong> ·
+        Every candidate is scored out of 100 for ordering — <strong>online presence gap (50)</strong> ·
         locality (20) · active-business signals (20) · trade type (6), minus whatever you've been declining.
-        ${(QUALITY_BARS[s.qualityBar] || QUALITY_BARS[DEFAULT_QUALITY_BAR]).minScore > 0
-          ? `Anything scoring under <strong>${(QUALITY_BARS[s.qualityBar] || QUALITY_BARS[DEFAULT_QUALITY_BAR]).minScore}</strong> is dropped before review, so expect far fewer — but better — leads than the raw scrape count.`
-          : 'No score floor is applied at this setting.'}
+        The checkboxes above decide what's shown at all; the score just decides what shows up first.
       </div>
       <div class="warn-note">
-        <strong>Hard filters are on.</strong> A business is discarded before you ever see it unless it has
+        <strong>Hard filters are always on.</strong> A business is discarded before you ever see it unless it has
         a business name, a real <strong>US phone number</strong> (a foreign number like +55 or +44 is rejected
         outright, even if the digit count happens to look right), and a <strong>confirmed Pennsylvania location</strong>
-        (no address/state at all is rejected too, rather than assumed local). When an owner's first name can also
-        be read from the business name —&nbsp;"Dave's Roofing", "Mike &amp; Sons Landscaping"&nbsp;— you'll see
-        an "Ask for ___" suggestion on the card, but its absence no longer excludes a lead.
+        (no address/state at all is rejected too, rather than assumed local — this still applies with Location left
+        blank above). When an owner's first name can also be read from the business name —&nbsp;"Dave's Roofing",
+        "Mike &amp; Sons Landscaping"&nbsp;— you'll see an "Ask for ___" suggestion on the card, but its absence
+        no longer excludes a lead.
       </div>
       <div class="warn-note">
-        <strong>This costs real money.</strong> Apify bills per result scraped, and each run consumes
-        your account credit. Start small (3–5 per category) until you're happy with the targeting.
+        <strong>This costs real money.</strong> Outscraper bills per result scraped, and each run consumes
+        your account balance. Start small (5–10 per category) until you're happy with the targeting.
       </div>
     </div>
     <div class="modal-foot">
-      <button type="button" data-action="reset-token" class="btn-ghost" style="border-color:var(--border);">Change token</button>
-      <button type="button" data-action="run-discovery" class="btn-primary-sm">🔍 Search ${total} businesses</button>
+      <button type="button" data-action="reset-token" class="btn-ghost" style="border-color:var(--border);">Change API key</button>
+      <button type="button" data-action="run-discovery" class="btn-primary-sm">🔍 Fetch ${total} businesses</button>
     </div>`;
 }
 
@@ -2958,7 +2980,7 @@ function discoverRunningHtml() {
       <div class="disc-progress">
         <div class="mini-spinner"></div>
         <h3 id="discProgressMsg">${escapeHtml(discoverState.progress || 'Starting…')}</h3>
-        <p>Google Maps scrapes usually take one to three minutes. You can leave this open.</p>
+        <p>Outscraper usually replies in a few seconds to under a minute for a small test batch. You can leave this open.</p>
         <div class="disc-elapsed" id="discElapsed">0s elapsed</div>
       </div>
     </div>
@@ -3061,16 +3083,13 @@ function discoverDoneHtml() {
         ${s.noOwnerCount} of these had no owner name readable from the business name — Google Maps doesn't
         publish one, so those are shown without an "Ask for ___" suggestion. Name, US phone, and PA location were still required.
       </div>` : ''}
-      ${(s.lowScoreCount || s.hasRealSiteCount) ? `<div class="run-note" style="margin-top:0;">
-        <strong>Quality bar (${escapeHtml((QUALITY_BARS[s.qualityBar] || QUALITY_BARS[DEFAULT_QUALITY_BAR]).label)}) removed:</strong>
-        ${[s.hasRealSiteCount ? `${s.hasRealSiteCount} that already have a real website` : '',
-           s.lowScoreCount ? `${s.lowScoreCount} scoring under ${(QUALITY_BARS[s.qualityBar] || QUALITY_BARS[DEFAULT_QUALITY_BAR]).minScore}/100` : '']
-          .filter(Boolean).join(' · ')}.
-        That's the "fewer but better" setting doing its job — lower the bar to Balanced or Everything if you want more volume.
+      ${s.presenceFilteredCount ? `<div class="run-note" style="margin-top:0;">
+        <strong>Presence-type filter removed ${s.presenceFilteredCount}</strong> that didn't match any of your checked
+        types. Check more boxes on the setup screen (e.g. "Has a real custom website") if you want more volume.
       </div>` : ''}
       ${nothingFound ? `<div class="run-note" style="margin-top:12px;">
-        Nothing left to review. Try more categories, a different location, a higher result count —
-        or drop the quality bar from Strict to Balanced.
+        Nothing left to review. Try more categories, a different or blank location, a higher result count —
+        or check more presence types on the setup screen.
       </div>` : ''}
     </div>
     <div class="modal-foot" style="justify-content:space-between;">
@@ -4064,7 +4083,7 @@ function attachEventListeners() {
       Object.assign(discoverState, {
         stage: 'setup', queue: [], index: 0, approved: 0, declined: 0, skipped: 0,
         filteredOut: 0, noOwnerCount: 0, noPhoneCount: 0, foreignPhoneCount: 0,
-        outsidePaCount: 0, lowScoreCount: 0, hasRealSiteCount: 0, scannedCount: 0, error: ''
+        outsidePaCount: 0, presenceFilteredCount: 0, scannedCount: 0, error: ''
       });
       renderDiscoverModal();
       return;
@@ -4078,10 +4097,14 @@ function attachEventListeners() {
       renderDiscoverModal();
       return;
     }
-    const barBtn = e.target.closest('[data-action="set-bar"]');
-    if (barBtn) {
+    // "What counts as a match" checkboxes — toggles one presence type in/out
+    // of the set that's allowed to reach the review queue.
+    const presenceBtn = e.target.closest('[data-action="toggle-presence"]');
+    if (presenceBtn) {
+      const key = presenceBtn.dataset.presence;
+      const i = discoverState.presenceTypes.indexOf(key);
+      if (i === -1) discoverState.presenceTypes.push(key); else discoverState.presenceTypes.splice(i, 1);
       captureDiscoverInputs();
-      discoverState.qualityBar = barBtn.dataset.bar;
       renderDiscoverModal();
       return;
     }
