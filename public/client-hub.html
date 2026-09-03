@@ -2547,11 +2547,14 @@ function opportunityBreakdown(c) {
   // 2. LOCALITY (0-20). Pennsylvania is a ranking preference now, not a hard
   //    filter — nationwide US results are allowed through, but local ones are
   //    scored highest so they still surface first.
+  // Out-of-state is deliberately NOT zeroed — a strong lead (no website,
+  // heavily reviewed) shouldn't get buried in the low tier just for being
+  // out of state. Locality nudges the order; it doesn't gate it.
   let loc, locWhy;
   if (c.cityTier === 'primary') { loc = 20; locWhy = 'core Bucks County area'; }
-  else if (c.cityTier === 'surrounding') { loc = 11; locWhy = 'surrounding Philadelphia area'; }
-  else if (c._isPennsylvania) { loc = 6; locWhy = 'elsewhere in Pennsylvania'; }
-  else { loc = 0; locWhy = 'outside Pennsylvania'; }
+  else if (c.cityTier === 'surrounding') { loc = 12; locWhy = 'surrounding Philadelphia area'; }
+  else if (c._isPennsylvania) { loc = 8; locWhy = 'elsewhere in Pennsylvania'; }
+  else { loc = 6; locWhy = 'outside Pennsylvania'; }
   parts.push({ label: 'Locality', points: loc, max: 20, why: locWhy });
 
   // 3. ACTIVE BUSINESS SIGNALS (0-20). Reviews prove it's a real, operating
