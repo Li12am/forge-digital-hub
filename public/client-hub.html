@@ -2234,7 +2234,10 @@ const LOCATION_PRESET_GROUPS = [
 ];
 // Flat list kept for any code that just needs "is this a known preset".
 const LOCATION_PRESETS = LOCATION_PRESET_GROUPS.reduce((all, g) => all.concat(g.items), []);
-const DEFAULT_DISCOVERY_LOCATION = 'Feasterville-Trevose, PA';
+// Blank by default — nationwide is now the default reach, since Pennsylvania
+// is a ranking preference rather than a requirement. Pick a town preset below
+// to narrow a specific run instead.
+const DEFAULT_DISCOVERY_LOCATION = '';
 
 /* Presence-type checkboxes — replaces the old three-tier Strict/Balanced/
    Everything "quality bar" with something more literal: exactly which kinds
@@ -3027,7 +3030,11 @@ function discoverSetupHtml() {
         <button type="button" class="regen-link" data-action="reset-cats">↻ Reset to recommended</button>
       </p>
 
-      <div class="import-step-title" style="margin-top:18px;">Location <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-faint);">— optional</span></div>
+      <div class="import-step-title" style="margin-top:18px;">Location <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-faint);">— optional, only narrows a specific run</span></div>
+      <div class="chip-grid">
+        <button type="button" class="cat-chip ${!s.location.trim() ? 'on' : ''}" data-action="set-location" data-loc="">🌎 Nationwide — biggest variety${!s.location.trim() ? ' (default)' : ''}</button>
+      </div>
+      <p class="field-note" style="margin-top:7px;">Or narrow this run to one area — local results are ranked to the top either way, so this just trims the pool:</p>
       ${LOCATION_PRESET_GROUPS.map(g => `
         <div class="loc-group">
           <div class="loc-group-label">${escapeHtml(g.label)}</div>
@@ -3036,9 +3043,6 @@ function discoverSetupHtml() {
           </div>
           ${g.note ? `<p class="field-note" style="margin-top:6px;">${escapeHtml(g.note)}</p>` : ''}
         </div>`).join('')}
-      <div class="chip-grid" style="margin-top:6px;">
-        <button type="button" class="cat-chip ${!s.location.trim() ? 'on' : ''}" data-action="set-location" data-loc="">No location — search categories only</button>
-      </div>
 
       <div class="two-col" style="margin-top:14px;">
         <div class="field">
