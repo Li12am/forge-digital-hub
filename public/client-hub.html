@@ -2455,6 +2455,16 @@ function isPennsylvaniaLocation(item, address) {
   return PA_ADDRESS_RE.test(address);
 }
 
+/* "English" stand-in: Google Maps data carries no business-language field, so
+   this rejects non-Latin SCRIPT instead of trying to detect language directly
+   — CJK, Hangul, Cyrillic, Arabic, Hebrew, Devanagari, Thai, etc. Accented
+   Latin letters (café, José's Landscaping) are still Latin script and pass;
+   this only catches names written in a different alphabet entirely. */
+const NON_LATIN_SCRIPT_RE = /[Ѐ-ӿԀ-ԯ԰-֏֐-׿؀-ۿ܀-ݏऀ-ॿ฀-๿぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/;
+function isEnglishScript(text) {
+  return !NON_LATIN_SCRIPT_RE.test(String(text || ''));
+}
+
 function mapsItemToCandidate(item, searchTerm) {
   const cat = DISCOVERY_CATEGORIES.find(c => c.term === searchTerm);
   const address = String(pickField(item, ['full_address', 'address', 'fullAddress', 'formattedAddress', 'street'])).trim();
@@ -2506,7 +2516,8 @@ function mapsItemToCandidate(item, searchTerm) {
     _mapsUrl: String(pickField(item, ['location_link', 'url', 'placeUrl', 'googleMapsUrl'])),
     _address: address,
     _isUsPhone: isUsPhoneNumber(String(pickField(item, ['phone', 'phoneUnformatted', 'phoneNumber'])).trim()),
-    _isPennsylvania: isPennsylvaniaLocation(item, address)
+    _isPennsylvania: isPennsylvaniaLocation(item, address),
+    _isEnglishScript: isEnglishScript(businessName)
   }, webInfo);
 }
 
@@ -2530,12 +2541,14 @@ function opportunityBreakdown(c) {
   else { presence = 0; presenceWhy = 'already has a real website'; }
   parts.push({ label: 'Online presence gap', points: presence, max: 50, why: presenceWhy });
 
-  // 2. LOCALITY (0-20). Pennsylvania is already a hard filter, so this is
-  //    purely about how close to core Bucks County territory they are.
+  // 2. LOCALITY (0-20). Pennsylvania is a ranking preference now, not a hard
+  //    filter — nationwide US results are allowed through, but local ones are
+  //    scored highest so they still surface first.
   let loc, locWhy;
   if (c.cityTier === 'primary') { loc = 20; locWhy = 'core Bucks County area'; }
   else if (c.cityTier === 'surrounding') { loc = 11; locWhy = 'surrounding Philadelphia area'; }
-  else { loc = 4; locWhy = 'elsewhere in Pennsylvania'; }
+  else if (c._isPennsylvania) { loc = 6; locWhy = 'elsewhere in Pennsylvania'; }
+  else { loc = 0; locWhy = 'outside Pennsylvania'; }
   parts.push({ label: 'Locality', points: loc, max: 20, why: locWhy });
 
   // 3. ACTIVE BUSINESS SIGNALS (0-20). Reviews prove it's a real, operating
@@ -2813,7 +2826,7 @@ async function startDiscoveryRun() {
     let noNameCount = 0;
     let noPhoneCount = 0;
     let foreignPhoneCount = 0;
-    let outsidePaCount = 0;
+    let nonEnglishCount = 0;
     let noOwnerCount = 0;
     let presenceFilteredCount = 0;
     items.forEach(item => {
@@ -2832,10 +2845,12 @@ async function startDiscoveryRun() {
       //    Brazilian +55 number can also land on 10-13 digits), so this is a
       //    separate, stricter check on top of the length check above.
       if (!c._isUsPhone) { filteredOut++; foreignPhoneCount++; return; }
-      // 4. must be positively confirmed as Pennsylvania — no address/state at
-      //    all is rejected rather than assumed local. Applies even with the
-      //    Location field left blank.
-      if (!c._isPennsylvania) { filteredOut++; outsidePaCount++; return; }
+      // 4. business name must be Latin-script — Google Maps has no language
+      //    field, so this is a stand-in for "English" rather than a literal
+      //    language check. Pennsylvania is deliberately NOT a hard filter
+      //    anymore (see the locality score instead) — nationwide US results
+      //    are allowed through, just ranked below local ones.
+      if (!c._isEnglishScript) { filteredOut++; nonEnglishCount++; return; }
       if (seen.has(c._placeKey)) { filteredOut++; return; }                   // dupe inside this batch
       seen.add(c._placeKey);
       if (!c.ownerName) noOwnerCount++;                                       // informational only — not a filter
@@ -2871,7 +2886,7 @@ async function startDiscoveryRun() {
     s.noOwnerCount = noOwnerCount;
     s.noPhoneCount = noPhoneCount;
     s.foreignPhoneCount = foreignPhoneCount;
-    s.outsidePaCount = outsidePaCount;
+    s.nonEnglishCount = nonEnglishCount;
     s.presenceFilteredCount = presenceFilteredCount;
     s.scannedCount = items.length;
     s.index = 0;
@@ -3029,7 +3044,7 @@ function discoverSetupHtml() {
         <div class="field">
           <label>Location <span class="opt">(or leave blank)</span></label>
           <input type="text" id="discLocation" value="${escapeHtml(s.location)}" placeholder="e.g. Feasterville-Trevose, PA — or leave blank">
-          <p class="field-note">Leaving this blank searches each category with no place attached — Google fills in a default area, and results are still filtered to Pennsylvania afterward either way.</p>
+          <p class="field-note">Leaving this blank searches each category with no place attached, for the widest nationwide variety. Local results are still ranked to the top either way — Pennsylvania is a preference now, not a requirement.</p>
         </div>
         <div class="field">
           <label>Results per category</label>
@@ -3048,11 +3063,13 @@ function discoverSetupHtml() {
       <div class="warn-note">
         <strong>Hard filters are always on.</strong> A business is discarded before you ever see it unless it has
         a business name, a real <strong>US phone number</strong> (a foreign number like +55 or +44 is rejected
-        outright, even if the digit count happens to look right), and a <strong>confirmed Pennsylvania location</strong>
-        (no address/state at all is rejected too, rather than assumed local — this still applies with Location left
-        blank above). When an owner's first name can also be read from the business name —&nbsp;"Dave's Roofing",
-        "Mike &amp; Sons Landscaping"&nbsp;— you'll see an "Ask for ___" suggestion on the card, but its absence
-        no longer excludes a lead.
+        outright, even if the digit count happens to look right), and an <strong>English (Latin-script) business
+        name</strong> — Google Maps has no language field, so names written in a different alphabet (Chinese,
+        Arabic, Cyrillic, etc.) are rejected as a stand-in for that. <strong>Pennsylvania is no longer a hard
+        filter</strong> — nationwide US results now come through for the widest variety, with local ones simply
+        ranked to the top of the queue. When an owner's first name can also be read from the business name —&nbsp;"Dave's
+        Roofing", "Mike &amp; Sons Landscaping"&nbsp;— you'll see an "Ask for ___" suggestion on the card, but its
+        absence no longer excludes a lead.
       </div>
     </div>
     <div class="modal-foot">
@@ -3090,6 +3107,7 @@ function discoverReviewHtml() {
   if (c.ownerName) reasons.push(`owner reads as <b>${escapeHtml(c.ownerName)}</b>`);
   if (c.cityTier === 'primary') reasons.push('in your core area');
   else if (c.cityTier === 'surrounding') reasons.push('in the surrounding area');
+  else if (!c._isPennsylvania) reasons.push('<b>out of state</b>');
   if (c._reviews) reasons.push(`${c._reviews} Google review${c._reviews === 1 ? '' : 's'}${c._rating ? ` at ${c._rating}★` : ''}`);
 
   // Opportunity score, computed at scan time and shown so the queue order is
@@ -3164,17 +3182,18 @@ function discoverDoneHtml() {
         that's the number that counts against your credits, regardless of how many made it past the filters below.
         <div style="margin-top:8px;">${balanceStatsHtml(s)}</div>
       </div>` : ''}
-      ${(s.noPhoneCount || s.foreignPhoneCount || s.outsidePaCount) ? `<div class="warn-note" style="margin-top:0;">
+      ${(s.noPhoneCount || s.foreignPhoneCount || s.nonEnglishCount) ? `<div class="warn-note" style="margin-top:0;">
         <strong>Hard filters removed:</strong>
         ${[s.noPhoneCount ? `${s.noPhoneCount} with no usable phone number` : '',
            s.foreignPhoneCount ? `${s.foreignPhoneCount} with a non-US phone number` : '',
-           s.outsidePaCount ? `${s.outsidePaCount} not confirmed as Pennsylvania` : '']
+           s.nonEnglishCount ? `${s.nonEnglishCount} with a non-Latin-script business name` : '']
           .filter(Boolean).join(' · ')}.
-        A business name, a real US phone number, and a confirmed PA location are all still required to reach review.
+        A business name, a real US phone number, and a Latin-script (English) business name are all still required to reach review.
+        Pennsylvania is no longer required — out-of-state leads now show too, just ranked below local ones.
       </div>` : ''}
       ${s.noOwnerCount ? `<div class="run-note" style="margin-top:0;">
         ${s.noOwnerCount} of these had no owner name readable from the business name — Google Maps doesn't
-        publish one, so those are shown without an "Ask for ___" suggestion. Name, US phone, and PA location were still required.
+        publish one, so those are shown without an "Ask for ___" suggestion. Name, US phone, and an English business name were still required.
       </div>` : ''}
       ${s.presenceFilteredCount ? `<div class="run-note" style="margin-top:0;">
         <strong>Presence-type filter removed ${s.presenceFilteredCount}</strong> that didn't match any of your checked
@@ -4177,7 +4196,7 @@ function attachEventListeners() {
       Object.assign(discoverState, {
         stage: 'setup', queue: [], index: 0, approved: 0, declined: 0, skipped: 0,
         filteredOut: 0, noOwnerCount: 0, noPhoneCount: 0, foreignPhoneCount: 0,
-        outsidePaCount: 0, presenceFilteredCount: 0, scannedCount: 0, error: ''
+        nonEnglishCount: 0, presenceFilteredCount: 0, scannedCount: 0, error: ''
       });
       renderDiscoverModal();
       return;
