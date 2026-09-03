@@ -2630,6 +2630,34 @@ function normalizeOutscraperResults(payload) {
   return out;
 }
 
+/* ---------------- Balance / credits ----------------
+   GET /profile/balance is Outscraper's documented "fetch user balance
+   information" endpoint. The exact response field names aren't confirmed
+   against a live account, so this reads several plausible ones and falls
+   back to showing the raw payload rather than silently displaying nothing. */
+async function fetchOutscraperBalance(token) {
+  const res = await fetch(OUTSCRAPER_BASE + '/profile/balance', {
+    method: 'GET',
+    headers: { 'X-API-KEY': token }
+  });
+  if (!res.ok) {
+    const err = new Error('Outscraper returned HTTP ' + res.status);
+    err.status = res.status;
+    throw err;
+  }
+  const payload = await res.json();
+  const data = (payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object') ? payload.data : payload;
+  const balance = pickField(data, ['balance', 'credits_balance', 'creditsBalance', 'credits', 'available_credits', 'availableCredits', 'remaining_credits', 'remainingCredits']);
+  const freeCredits = pickField(data, ['free_credits', 'freeCredits', 'free_balance', 'freeBalance']);
+  const usedCredits = pickField(data, ['used_credits', 'usedCredits', 'usage', 'total_used', 'totalUsed']);
+  return {
+    balance: balance,
+    freeCredits: freeCredits,
+    usedCredits: usedCredits,
+    raw: data
+  };
+}
+
 /* ---------------- Token storage ---------------- */
 async function loadOutscraperToken() {
   try {
@@ -2687,7 +2715,10 @@ function openDiscoverModal() {
     declined: 0,
     skipped: 0,
     filteredOut: 0,
-    cancelled: false
+    cancelled: false,
+    balance: null,
+    balanceLoading: false,
+    balanceError: ''
   };
   renderDiscoverModal();
   document.getElementById('discoverModal').classList.remove('hidden');
@@ -2698,7 +2729,32 @@ function openDiscoverModal() {
     discoverState.token = tok;
     discoverState.tokenKnown = true;
     if (discoverState.stage === 'setup') renderDiscoverModal();
+    if (tok) refreshOutscraperBalance();
   });
+}
+
+async function refreshOutscraperBalance() {
+  const s = discoverState;
+  if (!s || !s.token) return;
+  s.balanceLoading = true;
+  s.balanceError = '';
+  if (s.stage === 'setup') renderDiscoverModal();
+  try {
+    const b = await fetchOutscraperBalance(s.token);
+    if (!discoverState) return;
+    discoverState.balance = b;
+  } catch (err) {
+    console.error('Could not fetch Outscraper balance', err);
+    if (!discoverState) return;
+    discoverState.balanceError = err.status === 401 || err.status === 403
+      ? 'API key rejected when checking balance.'
+      : 'Could not reach Outscraper to check your balance.';
+  } finally {
+    if (discoverState) {
+      discoverState.balanceLoading = false;
+      if (discoverState.stage === 'setup') renderDiscoverModal();
+    }
+  }
 }
 function closeDiscoverModal() {
   if (discoverState) discoverState.cancelled = true;
@@ -2716,6 +2772,7 @@ async function handleSaveToken() {
     discoverState.token = val;
     showToast('Outscraper API key saved to your private workspace settings.');
     renderDiscoverModal();
+    refreshOutscraperBalance();
   } catch (err) {
     console.error('Failed to save token', err);
     showToast('Could not save the key — check your Firestore rules are deployed.', 'error');
@@ -2820,6 +2877,7 @@ async function startDiscoveryRun() {
     s.index = 0;
     s.stage = candidates.length ? 'review' : 'done';
     renderDiscoverModal();
+    refreshOutscraperBalance();
   } catch (err) {
     clearInterval(tick);
     if (!discoverState || err.message === 'cancelled') return;
@@ -2861,6 +2919,39 @@ async function decideCurrent(decision) {
     console.error('Failed to save decision', err);
     showToast('Could not save that decision — check your connection.', 'error');
   }
+}
+
+/* Shows whatever balance/credit fields Outscraper actually returned. The
+   field names in the response weren't confirmed against a live account, so
+   anything unrecognized falls back to pointing at the Outscraper dashboard
+   instead of just showing nothing. */
+function balanceStatsHtml(s) {
+  if (s.balanceLoading && !s.balance) return `<span>Checking your Outscraper balance…</span>`;
+  if (s.balanceError) return `<span>${escapeHtml(s.balanceError)} <button type="button" class="regen-link" data-action="refresh-balance">Retry</button></span>`;
+  const b = s.balance;
+  if (!b) return '';
+  const stats = [];
+  if (b.balance !== '') stats.push(['Balance', b.balance]);
+  if (b.freeCredits !== '') stats.push(['Free credits left', b.freeCredits]);
+  if (b.usedCredits !== '') stats.push(['Used', b.usedCredits]);
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+    <div style="display:flex;gap:18px;flex-wrap:wrap;">
+      ${stats.length ? stats.map(([label, val]) => `<span><strong>${escapeHtml(String(val))}</strong> <span style="color:var(--text-faint);">${escapeHtml(label)}</span></span>`).join('')
+        : `<span>Connected — Outscraper didn't return a recognizable balance field. <a href="https://app.outscraper.com/profile" target="_blank" rel="noopener noreferrer">Check it on your Outscraper profile ↗</a> instead.</span>`}
+    </div>
+    <button type="button" class="regen-link" data-action="refresh-balance" ${s.balanceLoading ? 'disabled' : ''}>${s.balanceLoading ? 'Refreshing…' : '↻ Refresh'}</button>
+  </div>`;
+}
+function balanceBlockHtml(s) {
+  return `
+    <div class="warn-note" style="margin-top:0;">
+      ${balanceStatsHtml(s)}
+      <p class="field-note" style="margin-top:6px;margin-bottom:0;">
+        Credits are spent on every result Outscraper's search <em>returns</em>, before your filters below run —
+        if you set "Results per category" to 25 and only 1 ends up matching your presence-type checkboxes and
+        hard filters, all ~25 still count against this balance. Lower the per-category count to test cheaply.
+      </p>
+    </div>`;
 }
 
 function discoverSetupHtml() {
@@ -2906,6 +2997,7 @@ function discoverSetupHtml() {
     </div>
     <div class="modal-body">
       ${s.error ? `<div class="dup-warning" style="margin-top:0;margin-bottom:14px;"><strong>⚠ ${escapeHtml(s.error)}</strong></div>` : ''}
+      ${balanceBlockHtml(s)}
       <div class="import-step-title">What counts as a match</div>
       <div class="chip-grid">
         ${PRESENCE_TYPES.map(p => `<button type="button" class="cat-chip ${s.presenceTypes.includes(p.key) ? 'on' : ''}" data-action="toggle-presence" data-presence="${p.key}">${s.presenceTypes.includes(p.key) ? '☑' : '☐'} ${escapeHtml(p.label)}</button>`).join('')}
@@ -2961,10 +3053,6 @@ function discoverSetupHtml() {
         blank above). When an owner's first name can also be read from the business name —&nbsp;"Dave's Roofing",
         "Mike &amp; Sons Landscaping"&nbsp;— you'll see an "Ask for ___" suggestion on the card, but its absence
         no longer excludes a lead.
-      </div>
-      <div class="warn-note">
-        <strong>This costs real money.</strong> Outscraper bills per result scraped, and each run consumes
-        your account balance. Start small (5–10 per category) until you're happy with the targeting.
       </div>
     </div>
     <div class="modal-foot">
@@ -3071,6 +3159,11 @@ function discoverDoneHtml() {
           ${s.filteredOut ? `<br>${s.filteredOut} of ${s.scannedCount || s.filteredOut} scanned were filtered out before review` : ''}
         </p>
       </div>
+      ${s.scannedCount ? `<div class="run-note" style="margin-top:0;">
+        Outscraper billed you for all <strong>${s.scannedCount}</strong> result${s.scannedCount === 1 ? '' : 's'} it returned this run —
+        that's the number that counts against your credits, regardless of how many made it past the filters below.
+        <div style="margin-top:8px;">${balanceStatsHtml(s)}</div>
+      </div>` : ''}
       ${(s.noPhoneCount || s.foreignPhoneCount || s.outsidePaCount) ? `<div class="warn-note" style="margin-top:0;">
         <strong>Hard filters removed:</strong>
         ${[s.noPhoneCount ? `${s.noPhoneCount} with no usable phone number` : '',
@@ -4078,6 +4171,7 @@ function attachEventListeners() {
     if (e.target.closest('[data-action="close-discover"]')) { closeDiscoverModal(); return; }
     if (e.target.closest('[data-action="save-token"]')) { handleSaveToken(); return; }
     if (e.target.closest('[data-action="reset-token"]')) { discoverState.token = ''; renderDiscoverModal(); return; }
+    if (e.target.closest('[data-action="refresh-balance"]')) { refreshOutscraperBalance(); return; }
     if (e.target.closest('[data-action="run-discovery"]')) { startDiscoveryRun(); return; }
     if (e.target.closest('[data-action="back-to-setup"]')) {
       Object.assign(discoverState, {
