@@ -2164,6 +2164,10 @@ const OUTSCRAPER_BASE = 'https://api.outscraper.com';
    trade itself is genuinely predictive: a one-truck pressure-washing operator
    is far more often Facebook-only than a licensed HVAC company that has had a
    site for a decade. Sorted high-gap first so the best options are on top. */
+/* Pruned to the trades that actually get used — licensed/franchised trades
+   (electrician, plumber, HVAC, auto body) and seasonal/low-volume ones
+   (snow removal, paving) were removed: they rarely show up cleanly on Google
+   Maps as no-website leads and were dead weight in the picker. */
 const DISCOVERY_CATEGORIES = [
   // HIGH — owner-operator, word-of-mouth trades. Usually no site or FB-only.
   { term: 'pressure washing', type: 'Power Washing', gap: 'high' },
@@ -2173,7 +2177,6 @@ const DISCOVERY_CATEGORIES = [
   { term: 'lawn care service', type: 'Landscaping', gap: 'high' },
   { term: 'tree service', type: 'Tree Service', gap: 'high' },
   { term: 'gutter cleaning', type: 'Roofing', gap: 'high' },
-  { term: 'snow removal service', type: 'Snow Removal', gap: 'high' },
   { term: 'hauling service', type: 'Junk Removal', gap: 'high' },
   // MEDIUM — small crews, mixed digital maturity.
   { term: 'deck builder', type: 'Deck & Porch Builder', gap: 'med' },
@@ -2181,15 +2184,9 @@ const DISCOVERY_CATEGORIES = [
   { term: 'painting contractor', type: 'Painting', gap: 'med' },
   { term: 'masonry contractor', type: 'Hardscaping & Masonry', gap: 'med' },
   { term: 'concrete contractor', type: 'Concrete', gap: 'med' },
-  { term: 'paving contractor', type: 'Paving / Asphalt', gap: 'med' },
   { term: 'siding contractor', type: 'Siding', gap: 'med' },
   { term: 'general contractor', type: 'General Contractor / Remodeling', gap: 'med' },
-  { term: 'roofing contractor', type: 'Roofing', gap: 'med' },
-  // LOW — licensed/established/franchised trades that usually already have a site.
-  { term: 'electrician', type: 'Electrician', gap: 'low' },
-  { term: 'plumber', type: 'Plumbing', gap: 'low' },
-  { term: 'hvac contractor', type: 'HVAC', gap: 'low' },
-  { term: 'auto body shop', type: 'Auto Body', gap: 'low' }
+  { term: 'roofing contractor', type: 'Roofing', gap: 'med' }
 ];
 const CATEGORY_GAP_SCORE = { high: 6, med: 3, low: 0 };
 function categoryGapFor(businessType, searchTerm) {
@@ -2209,9 +2206,10 @@ function matchCategoryTerm(rawQuery, categories) {
   return hit || categories[0] || '';
 }
 
-// Defaults are now the high-gap trades only — the ones most likely to be
-// running with no real website at all.
-const DEFAULT_DISCOVERY_CATEGORIES = ['pressure washing', 'junk removal', 'handyman', 'landscaping', 'tree service'];
+// Defaults are every high-gap trade — the ones most likely to be running
+// with no real website at all. computeDiscoveryRecommendation() below
+// overrides this with your actual lead data whenever there's enough of it.
+const DEFAULT_DISCOVERY_CATEGORIES = DISCOVERY_CATEGORIES.filter(c => c.gap === 'high').map(c => c.term);
 
 /* Tight, Bucks-County-first presets rather than "PA" broadly. Ordered core
    territory outward; the free-text box stays editable for anywhere else —
@@ -2234,10 +2232,6 @@ const LOCATION_PRESET_GROUPS = [
 ];
 // Flat list kept for any code that just needs "is this a known preset".
 const LOCATION_PRESETS = LOCATION_PRESET_GROUPS.reduce((all, g) => all.concat(g.items), []);
-// Blank by default — nationwide is now the default reach, since Pennsylvania
-// is a ranking preference rather than a requirement. Pick a town preset below
-// to narrow a specific run instead.
-const DEFAULT_DISCOVERY_LOCATION = '';
 
 /* Presence-type checkboxes — replaces the old three-tier Strict/Balanced/
    Everything "quality bar" with something more literal: exactly which kinds
@@ -2254,7 +2248,7 @@ const PRESENCE_TYPES = [
 ];
 // 'real' is off by default -- everything else on, matching "no websites... or
 // Facebook... websites" from how this was described.
-const DEFAULT_PRESENCE_TYPES = ['none', 'facebook', 'social', 'diy'];
+const DEFAULT_PRESENCE_TYPES = ['none', 'facebook', 'diy'];
 function presenceTypeFor(c) {
   if (c.hasWebsite) return 'real';
   if (c.weakSiteUrl) return 'diy';
@@ -2294,6 +2288,63 @@ function categoryDeclineRate(type) {
   const forType = leadDecisions.filter(d => d.businessType === type);
   if (forType.length < 3) return 0;   // too little signal to act on yet
   return forType.filter(d => d.decision === 'declined').length / forType.length;
+}
+function cityDeclineRate(city) {
+  const forCity = leadDecisions.filter(d => d.city === city);
+  if (forCity.length < 3) return 0;
+  return forCity.filter(d => d.decision === 'declined').length / forCity.length;
+}
+function capitalizeFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+/* "Smarter defaults" for Find New Leads: instead of always starting from the
+   same static high-gap list, look at what's actually in your pipeline —
+   leads, follow-ups, and history all live in the one `leads` collection —
+   plus your approve/decline history, and recommend categories + a location
+   that match what's been working. Falls back to the static defaults with no
+   note whenever there isn't enough data yet (a brand-new hub). */
+function bestCityForType(type) {
+  const counts = {};
+  allLeads.forEach(l => { if (l.businessType === type && l.city) counts[l.city] = (counts[l.city] || 0) + 1; });
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  for (const [city] of entries) { if (cityDeclineRate(city) < 0.6) return city; }
+  return '';
+}
+function computeDiscoveryRecommendation() {
+  const FALLBACK = { categories: DEFAULT_DISCOVERY_CATEGORIES.slice(), location: '', note: '' };
+  if (allLeads.length < 3) return FALLBACK;
+
+  const typeCounts = {};
+  allLeads.forEach(l => { if (l.businessType) typeCounts[l.businessType] = (typeCounts[l.businessType] || 0) + 1; });
+  const cityCounts = {};
+  allLeads.forEach(l => { if (l.city) cityCounts[l.city] = (cityCounts[l.city] || 0) + 1; });
+
+  const gapRank = { high: 2, med: 1, low: 0 };
+  const scoredCats = DISCOVERY_CATEGORIES
+    .map(c => ({ term: c.term, type: c.type, gap: c.gap, leadCount: typeCounts[c.type] || 0, declineRate: categoryDeclineRate(c.type) }))
+    .filter(c => c.declineRate < 0.6);               // avoid categories/types you've heavily declined
+  scoredCats.sort((a, b) => (b.leadCount - a.leadCount) || (gapRank[b.gap] - gapRank[a.gap]) || (a.declineRate - b.declineRate));
+  const withLeads = scoredCats.filter(c => c.leadCount > 0);
+  if (!withLeads.length) return FALLBACK;
+
+  // Fill to 5 categories: data-backed ones first, then the next best
+  // high/med-gap ones so a thin pipeline still gets a reasonable spread.
+  const picked = [];
+  withLeads.forEach(c => { if (picked.length < 5) picked.push(c.term); });
+  scoredCats.forEach(c => { if (picked.length < 5 && !picked.includes(c.term)) picked.push(c.term); });
+
+  // Best overall location — your own towns first, then the wider surrounding
+  // area, avoiding any town you've heavily declined leads in.
+  const cityEntries = Object.entries(cityCounts).filter(([city]) => cityDeclineRate(city) < 0.6).sort((a, b) => b[1] - a[1]);
+  let bestCity = '';
+  for (const [city] of cityEntries) { if (PRIMARY_TOWNS.includes(city)) { bestCity = city; break; } }
+  if (!bestCity) { for (const [city] of cityEntries) { if (SURROUNDING_TOWNS.includes(city)) { bestCity = city; break; } } }
+  const location = bestCity ? bestCity + ', PA' : '';
+
+  const topTwo = withLeads.slice(0, 2);
+  const parts = topTwo.map(c => `${capitalizeFirst(c.term)} in ${bestCityForType(c.type) || bestCity || 'Pennsylvania'}`);
+  const note = parts.length ? `Based on your current leads, recommending: ${parts.join(' + ')}` : '';
+
+  return { categories: picked, location: location, note: note };
 }
 
 /* Converts one Google Maps record into our lead shape, reusing the very same
@@ -2718,12 +2769,15 @@ async function recordDecision(candidate, decision) {
 
 /* ---------------- Modal flow ---------------- */
 function openDiscoverModal() {
+  const rec = computeDiscoveryRecommendation();
   discoverState = {
     stage: 'setup',
     token: '',
     tokenKnown: false,
-    categories: DEFAULT_DISCOVERY_CATEGORIES.slice(),
-    location: DEFAULT_DISCOVERY_LOCATION,
+    categories: rec.categories.slice(),
+    recommendedCategories: rec.categories.slice(),
+    location: rec.location,
+    recommendationNote: rec.note,
     presenceTypes: DEFAULT_PRESENCE_TYPES.slice(),
     perTerm: 5,
     progress: '',
@@ -3019,11 +3073,12 @@ function discoverSetupHtml() {
     <div class="modal-body">
       ${s.error ? `<div class="dup-warning" style="margin-top:0;margin-bottom:14px;"><strong>⚠ ${escapeHtml(s.error)}</strong></div>` : ''}
       ${balanceBlockHtml(s)}
+      ${s.recommendationNote ? `<div class="run-note" style="margin-top:0;">💡 ${escapeHtml(s.recommendationNote)} — picked from your current leads and call history below.</div>` : ''}
       <div class="import-step-title">What counts as a match</div>
       <div class="chip-grid">
         ${PRESENCE_TYPES.map(p => `<button type="button" class="cat-chip ${s.presenceTypes.includes(p.key) ? 'on' : ''}" data-action="toggle-presence" data-presence="${p.key}">${s.presenceTypes.includes(p.key) ? '☑' : '☐'} ${escapeHtml(p.label)}</button>`).join('')}
       </div>
-      <p class="field-note" style="margin-top:7px;">A business is only shown if it matches one of the checked types. Phone number and a confirmed Pennsylvania address are always required regardless.</p>
+      <p class="field-note" style="margin-top:7px;">A business is only shown if it matches one of the checked types. A real US phone number and an English business name are always required regardless; Pennsylvania just ranks higher, it's not required.</p>
 
       <div class="import-step-title" style="margin-top:18px;">Categories <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-faint);">— ★ = trades that rarely have a website</span></div>
       <div class="chip-grid">
@@ -3058,7 +3113,9 @@ function discoverSetupHtml() {
           <select id="discPerTerm">
             ${[5, 10, 15, 20, 30, 50].map(n => `<option value="${n}" ${s.perTerm === n ? 'selected' : ''}>${n}</option>`).join('')}
           </select>
-          <p class="field-note">${s.categories.length} categor${s.categories.length === 1 ? 'y' : 'ies'} × ${s.perTerm} = up to <strong>${total}</strong> scraped. Start at 5 or 10 as a quick test.</p>
+          <p class="field-note">${s.categories.length} categor${s.categories.length === 1 ? 'y' : 'ies'} × ${s.perTerm} = up to <strong>${total}</strong> scraped.
+            Start at <strong>5</strong>. Raise to <strong>8–10</strong> if the queue comes back too short.
+            Don't go higher than <strong>10</strong> on the first run of a new area — check it's worth it before scaling up.</p>
         </div>
       </div>
 
@@ -4237,7 +4294,7 @@ function attachEventListeners() {
     }
     if (e.target.closest('[data-action="reset-cats"]')) {
       captureDiscoverInputs();
-      discoverState.categories = DEFAULT_DISCOVERY_CATEGORIES.slice();
+      discoverState.categories = (discoverState.recommendedCategories || DEFAULT_DISCOVERY_CATEGORIES).slice();
       renderDiscoverModal();
       return;
     }
